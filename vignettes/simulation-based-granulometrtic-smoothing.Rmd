@@ -1,0 +1,228 @@
+---
+title: "Simulation-based granulometrtic smoothing"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{simulation-based-granulometrtic-smoothing}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup, echo = F, warning = F, message =F }
+library(tidyverse)
+devtools::load_all()
+#library(simulationBands)
+```
+
+# Images demos to understand paper
+
+```{r echo = F, warning = F}
+set.seed(1)
+data <- data.frame(x = runif(10000),
+                   y = runif(10000))
+
+#plot(data$x, data$y)
+#id_vals <- identify(data$x, data$y)
+id_vals <- c(545, 800, 1090, 1659, 1750, 1886, 2374, 2692,
+             2901, 3411, 3839, 4018, 5023, 5341, 5505,
+             5523, 7983, 8273, 8706, 9025, 9401)
+
+data_select <- data[id_vals,] 
+data_select$x[data_select$y < .55] <-
+  data_select$x[data_select$y < .55] + .05
+
+data_select$y[data_select$y > .5 & data_select$y < .65] <-
+  data_select$y[data_select$y > .5 & data_select$y < .65] + .04
+
+data_select$x[data_select$x < .3] <-
+  data_select$x[data_select$x  < .3] + .05
+
+
+
+ggplot(data_select) + 
+  geom_point(aes(x = x, y = y)) +
+  stat_density_2d(aes(x = x, y = y),h = .1) +
+  theme_minimal() + 
+  theme(aspect.ratio = 1)
+```
+
+```{r echo = F, message = F, warning = F}
+library(ks)
+
+# internal_density <- function(x,y, data, h =.1){
+#   n <- nrow(data)
+#   d <- sqrt(((x - data$x)/h)^2 + ((y - data$y)/h)^2)
+#   probs <- 1/(2*pi) * det(matrix(c(h, 0, 0, h), nrow = 2))^(-1/2) * 
+#     exp((-1/2)*d^2)
+#   return(mean(probs))
+# }
+# 
+# data_select$prob <- apply(data_select, 1, function(row) internal_density(row[[1]], row[[2]], data_select))
+# 
+# ggplot(data_select) + 
+#   geom_point(aes(x = x, y = y, color = prob)) +
+#   stat_density_2d(aes(x = x, y = y),h = .1) +
+#   theme_minimal() + 
+#   theme(aspect.ratio = 1)
+
+my_kde <- ks::kde(data_select %>% select(x,y), h = .1 )
+data_select$my_prob <- dkde(data_select %>% select(x,y), my_kde)
+data_select$rank <- rank(data_select$my_prob)
+
+library(ggrepel)
+library(latex2exp)
+
+ggplot(data_select) + 
+  geom_point(aes(x = x, y = y)) +
+  geom_text_repel(aes(x = x, y = y, label = rank)) +
+  stat_density_2d(aes(x = x, y = y), h = .1) +
+  theme_minimal() + 
+  theme(aspect.ratio = 1) +
+  labs(title = "Data Visualization",
+       subtitle = "ranked by estimated probability value",
+       y = TeX("$y_2$"),
+       x = TeX("$y_1$"))
+
+ggplot(data_select) + 
+  geom_point(aes(x = x, y = y)) +
+  geom_text_repel(aes(x = x, y = y, label = rank)) +
+  theme_minimal() + 
+  theme(aspect.ratio = 1) +
+  labs(title = "Data Visualization",
+       subtitle = "ranked by estimated probability value",
+       y = TeX("$y_2$"),
+       x = TeX("$y_1$"))
+
+
+```
+
+
+```{r}
+dist_x <- dist(data_select %>% select(x,y)) %>% as.matrix()
+probs <- data_select$my_prob
+rank_prob_range <- (1:nrow(data_select))/nrow(data_select) + .5/nrow(data_select)
+```
+
+
+```{r functions}
+split_threshold_sims <- function(probs, threshold = NA, rank_prob = NA){
+  
+  if (is.na(threshold) & is.na(rank_prob)){
+    stop("either 'threshold' or 'rank_prop' must be specified")
+  }
+ 
+  if (is.na(threshold)){
+   proportion_rank <- rank(probs)/ length(probs)
+   id <- 2*(proportion_rank > rank_prob) - 1
+  } else{
+   id <- 2*(probs < threshold) - 1
+  }
+  
+  return(id)
+}
+
+
+plus_update <- function(dist_x, group_id, r_n = 1){
+  group_id_inner <- group_id
+  plus_dist_to_minus <- dist_x[group_id == 1,][,group_id == -1]
+  group_id_inner[group_id == 1] <- 2*(apply(plus_dist_to_minus, 1, min) > r_n) - 1
+  return(group_id_inner)
+}
+
+devtools::load_all("~/Documents/CMU/research/EpiCompare/")
+
+contour_vis_df <- function(correct_plus_data, r_n = 1, over_delta = .1, grid_size = c(200,200)){
+  # code similar to EpiCompare::StatPredBandDeltaBall's compute_group function
+  data_deep_points <- correct_plus_data
+  
+  delta_info <- EpiCompare::delta_structure(data_deep_points, xy_columns = c("x", "y"))
+
+
+  structure <- delta_info$structure
+
+  inner_df <- dplyr::setdiff(data_deep_points %>%
+                               dplyr::select(x,y),
+                             structure %>%
+                               dplyr::select(x,y))
+
+  border_points <- structure %>% dplyr::select(x,y)
+  inner_points <- inner_df
+
+  xrange <- seq(min(border_points$x) - over_delta,
+                max(border_points$x) + over_delta,
+                length.out = grid_size[1])
+
+  yrange <- seq(min(border_points$y) - over_delta,
+                max(border_points$y) + over_delta,
+                length.out = grid_size[2])
+
+  updated_gridpoints <- EpiCompare::get_closest(border_points, inner_points,
+                                    r_n,
+                                    xrange = xrange,
+                                    yrange = yrange,
+                                    gridbreaks = NULL)
+  
+  
+  update_gridpoints_mat <- tidyr::pivot_wider(updated_gridpoints,
+                                                names_from = "y",
+                                                values_from = "z") %>%
+      dplyr::select(-x) %>% as.matrix
+  
+  
+  cl <- grDevices::contourLines(x = xrange, y = yrange,
+                                z = update_gridpoints_mat,levels = c(2))
+
+  lengths <- vapply(cl, function(x) length(x$x), integer(1))
+  xs <- unlist(lapply(cl, "[[", "x"), use.names = FALSE)
+  ys <- unlist(lapply(cl, "[[", "y"), use.names = FALSE)
+  pieces <- rep(seq_along(cl), lengths)
+
+  vis_df <- data.frame(
+    x = xs,
+    y = ys,
+    piece = pieces)
+  
+  return(vis_df)
+}
+```
+
+```{r}
+# single selection
+rank_prob <- rank_prob_range[3]
+r_n <- .05
+
+group_id <- split_threshold_sims(probs, rank_prob = rank_prob)
+group_id_clean <- plus_update(dist_x, group_id, r_n = r_n)
+
+data_select <- data_select %>%
+  mutate(raw_id = group_id,
+         cleaned_id = group_id_clean)
+```
+
+```{r}
+vis_df <- contour_vis_df(data_select[group_id_clean == 1,], r_n = r_n)
+```
+
+```{r}
+ggplot2:::print.ggplot(vis_df %>%
+  ggplot() +
+  geom_polygon(aes(x = x , y = y, group = piece), fill = NA, color = "red") +
+  geom_point(data = data_select, aes(x = x , y= y, 
+                                     color = factor(cleaned_id), 
+                                     shape = factor(raw_id))) +
+  theme_minimal() +
+  theme(aspect.ratio = 1) +
+  labs(title = "Data Visualization",
+       subtitle = "ranked by estimated probability value",
+       y = TeX("$y_2$"),
+       x = TeX("$y_1$"),
+       color = TeX("Indicator if in $((X_n^-(\\lambda) \\oplus r_n B)^C \\bigcap X_n^+(\\lambda))$"),
+       shape = TeX("Indicator if in $X_n^-(\\lambda)$ or $X_n^+(\\lambda)$")))
+```
+

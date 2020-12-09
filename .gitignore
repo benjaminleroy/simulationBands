@@ -1,0 +1,10 @@
+.Rproj.user
+.Rbuildignore
+.Rhistory
+.DS_Store
+inst/doc
+docs
+
+dev/*
+shiny_apps/*
+images/*

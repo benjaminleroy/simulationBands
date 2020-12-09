@@ -1,0 +1,25 @@
+Package: simulationBands
+Title: Conformal Prediction Bands with Simulations
+Version: 0.0.0.9000
+Authors@R: 
+    person(given = "Benjamin",
+           family = "LeRoy",
+           role = c("aut", "cre"),
+           email = "benjaminpeterleroy@gmail.com")
+Description: Conformal Prediction Bands with Simulations.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.1
+Suggests: 
+    knitr,
+    rmarkdown
+Imports:
+    dplyr,
+    ggplot2,
+    stringr,
+    testthat,
+    tidyr,
+    tidyselect
+VignetteBuilder: knitr
