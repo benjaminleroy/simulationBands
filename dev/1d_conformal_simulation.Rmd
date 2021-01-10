@@ -1,0 +1,1211 @@
+---
+title: "Example of Simulation-based conformal inference in 1 dimension."
+output: html_document
+---
+
+We DON'T expect one to run this document.
+
+```{r echo = F}
+# document hyper parameters
+
+confidence_level <- .9
+confidence_level_string <- "90%"
+confidence_level_image_string <- "90percent"
+n_simulations <- 1000
+delta_prop <- .8
+delta_prop_string <- "80%"
+delta_prop_image_string <- "80percent"
+
+n_sims_containment <- 300
+verbose <- T
+save_fig <- T
+
+rerun <- T # to rerun all analysis even if already saved...
+```
+
+
+
+We can describe the generative distribution as 
+$$
+X \sim Unif(-1.5, 1.5) \\
+(Y|X=x) \sim .5 N(f(x)-g(x), \sigma^2(x)) + .5 N(f(x)+g(x),\sigma^2(x)) \\
+$$
+where
+
+1. $f(x) = (x-1)^2(x+1)$,
+2. $g(x) = 2\sqrt{x+.5} \cdot \mathbb{I}(x\geq q -.5)$ and 
+3. $\sigma(x) = 1/4 + |x|$.
+
+
+```{r}
+library(tidyverse)
+library(devtools)
+library(ggrepel)
+library(gridExtra)
+
+
+load_all("../")
+load_all("../../EpiCompare/") # tidy_dist_mat
+
+
+set.seed(1)
+df <- tibble(x = runif(1000, min = -1.5, max = 1.5))
+df$y <- sapply(df$x, function(x) {simulationBands::lei_wasserman_data_conditional_simulate(x, n = 1)[[1]]$sim})
+
+calibration_set <- tibble(x = runif(1000, min = -1.5, max = 1.5))
+calibration_set$y <- sapply(calibration_set$x, function(x) {simulationBands::lei_wasserman_data_conditional_simulate(x, n = 1)[[1]]$sim})
+
+
+test_set <- tibble(x = runif(1000, min = -1.5, max = 1.5))
+test_set$y <- sapply(test_set$x, function(x) {simulationBands::lei_wasserman_data_conditional_simulate(x, n = 1)[[1]]$sim})
+
+test_set_discrete <- tibble(x = seq(-1.5,1.5, by = .01))
+test_set_discrete$y <- sapply(test_set_discrete$x, function(x) {simulationBands::lei_wasserman_data_conditional_simulate(x, n = 1)[[1]]$sim})
+```
+
+
+```{r functions}
+get_delta <- function(dist_mat){
+  # similar to EpiCompare function
+  diag(dist_mat) <- max(dist_mat)
+  mm_delta <- apply(dist_mat, MARGIN = 1, min) %>% max
+  return(mm_delta)
+}
+
+maxmin_inner <- function(df_row, df_col){
+  p <- dim(df_row)[2]
+  
+  assertthat::assert_that(assertthat::are_equal(p, dim(df_col)[2]),
+                          msg = "DFs have different dimension (p)")
+
+  maxmin <- -Inf
+  for (i_idx in 1:nrow(df_row)){
+    min_inner <- Inf
+    for (j_idx in 1:nrow(df_col)){
+      min_inner <- min(c(stats::dist(rbind(df_row[i_idx,], df_col[j_idx,])),
+                         min_inner))
+    }
+    maxmin <- max(c(min_inner, maxmin))
+  }
+  
+  return(maxmin)
+}
+
+library(RANN)
+
+maxmin_inner2 <- function(df_row, df_col, only_val = T){
+  p <- dim(df_row)[2]
+  
+  assertthat::assert_that(assertthat::are_equal(p, dim(df_col)[2]),
+                          msg = "DFs have different dimension (p)")
+  
+  nn_info <- RANN::nn2(data = df_col, query = df_row, k = 1, treetype = "kd")
+  if (only_val){
+    return(max(nn_info$nn.dists))
+  } else {
+    return(list(max(nn_info$nn.dists), nn_info$nn.dists))
+  }
+  
+}
+
+maxmin_distance_vector <- function(truth_df, simulations_grouped_df,
+                                  data_column_names = c("S", "I", "R")){
+  
+  
+  mm_df <- simulations_grouped_df %>% 
+    nest() %>% 
+    mutate(maxmin_dist = purrr::map(data, function(df){
+      maxmin_inner(df_row = truth_df[data_column_names],
+                   df_col = df[data_column_names])
+    })) %>% 
+    select(-data) %>%
+    unnest(maxmin_dist)
+  
+  return(mm_df)
+}
+
+maxmin_distance_vector2 <- function(truth_df, simulations_grouped_df,
+                                  data_column_names = c("S", "I", "R"),
+                                  .all_info = F){
+  
+  if(!.all_info){
+  mm_df <- simulations_grouped_df %>% 
+    nest() %>% 
+    mutate(maxmin_dist = purrr::map(data, function(df){
+      maxmin_inner2(df_row = truth_df[data_column_names],
+                   df_col = df[data_column_names])
+    })) %>% 
+    select(-data) %>%
+    unnest(maxmin_dist)
+  } else {
+    all_info_list <- simulations_grouped_df %>% group_split()
+    all_info_names <- simulations_grouped_df %>% group_keys()
+    
+    dist_info_list <- lapply(all_info_list, function(df) {
+      maxmin_inner2(df_row = truth_df[data_column_names],
+                    df_col = df[data_column_names],only_val = F)[[2]]})
+    
+    
+    dist_info_matrix <- t(do.call(cbind, dist_info_list))
+    dist_info_df <- cbind(all_info_names,
+                          data.frame(dist_info_matrix))
+    
+    mm_df <- cbind(all_info_names, maxmin_dist = apply(dist_info_matrix,1, max))
+    return(list(mm_df, dist_info_df))
+  }
+}
+```
+
+
+```{r}
+
+
+#' Title
+#'
+#' @param truth_df 
+#' @param simulations_grouped_df 
+#' @param data_column_names 
+#' @param conformal_score_cut note this can be an integer, string percentage or 
+# fraction, but relates to the conformal cut (not the confidence level).
+#'
+#' @return
+#' @export
+#'
+#' @examples
+simulation_based_conformal_1d <- function(truth_df, simulations_grouped_df,
+                                          data_column_names = c("y"),
+                                          delta_prop = .8){
+                                          
+  
+  
+  
+  assertthat::assert_that(inherits(simulations_grouped_df, "grouped_df"))
+  group_names <- names(group_keys(simulations_grouped_df))
+    
+  truth_df_inner <- truth_df %>% 
+    dplyr::select(dplyr::one_of(data_column_names))
+  
+  simulations_group_df_inner <- simulations_grouped_df %>%
+    dplyr::select(dplyr::one_of(c(group_names, data_column_names)))
+  
+  group_info <- simulations_group_df_inner %>% group_keys()
+  
+  dist_mat <- simulations_group_df_inner %>% group_split() %>%
+    do.call(rbind, .) %>% # match group_info ordering
+    select(one_of(data_column_names)) %>% 
+    dist() %>% as.matrix()
+  
+  tdm_sims <- EpiCompare::tidy_dist_mat(dist_mat, group_info, group_info)
+  
+  # sigma selection
+  
+  sigma_size <- c("20%" = .2, "25%" = .25, "30%" = .3,
+                  "35%" = .35, "40%" = .4, "45%" = .45)
+  
+  percentage <- names(sigma_size)[stats::quantile(as.matrix(tdm_sims), sigma_size) > 0][1]
+  
+  
+  # rank_df
+  pseudo_density_df <- EpiCompare::distance_psuedo_density_function(
+    tdm_sims,
+    sigma = percentage, df_out = T) %>%
+    mutate(ranking = rank(psuedo_density,ties.method = "min")) #spelling error... :(
+  
+  assertthat::assert_that(all(!is.na(pseudo_density_df$psuedo_density)),
+                          msg = paste("internal error in",
+                                      "distance_psuedo_density_function",
+                                      "function's sigma selection."))
+  
+  mm_df <- maxmin_distance_vector2(truth_df = truth_df_inner,
+                                   simulations_grouped_df = simulations_group_df_inner,
+                                   data_column_names = c("y"),
+                                   .all_info = F)
+  
+  proportion_points_not_included <- 1 - delta_prop
+  
+  top_points <- simulations_group_df_inner %>% 
+    left_join(pseudo_density_df, by = group_names) %>% 
+    mutate(keep = ranking > ceiling(proportion_points_not_included*nrow(simulations_group_df_inner))) %>%
+    ungroup() %>% filter(keep) %>%
+    select(one_of(data_column_names))
+  
+  
+  mm_delta <- get_delta(as.matrix(dist(top_points)))
+  
+  containment_df <- pseudo_density_df %>% 
+    left_join(mm_df, by = group_names) %>%
+    mutate(delta_close = maxmin_dist < mm_delta)
+   
+  
+  conformal_score <- max(c(containment_df$ranking[containment_df$delta_close],
+                           0))
+  
+  return(list(conformal_score = conformal_score, containment_df = containment_df, 
+              mm_delta = mm_delta, 
+              truth_df_inner = truth_df_inner, 
+              simulations_group_df_inner = simulations_group_df_inner,
+              parameters = c("mm_delta_prop" = proportion_points_not_included, 
+                             "sigma_percentage" = percentage)))
+}
+
+simulation_based_conformal_1d_region <- function(simulations_grouped_df,
+                                          data_column_names = c("y"),
+                                          conformal_score_cut = .9,
+                                          delta_prop = .8){
+  
+  if(!EpiCompare::is.wholenumber(conformal_score_cut)){
+    if(is.character(conformal_score_cut)){
+      inner_percent <- EpiCompare::check_character_percent(conformal_score_cut)
+    } else {
+      inner_percent <- conformal_score_cut
+    }
+    conformal_score_cut <- ceiling(inner_percent * nrow(simulations_grouped_df))
+  }
+  
+  assertthat::assert_that(inherits(simulations_grouped_df, "grouped_df"))
+  group_names <- names(group_keys(simulations_grouped_df))
+  
+  
+  simulations_group_df_inner <- simulations_grouped_df %>%
+    dplyr::select(dplyr::one_of(c(group_names, data_column_names)))
+  
+  group_info <- simulations_group_df_inner %>% group_keys()
+  
+  dist_mat <- simulations_group_df_inner %>% group_split() %>%
+    do.call(rbind, .) %>% # match group_info ordering
+    select(one_of(data_column_names)) %>% 
+    dist() %>% as.matrix()
+  
+  tdm_sims <- EpiCompare::tidy_dist_mat(dist_mat, group_info, group_info)
+  
+  # sigma selection
+  
+  sigma_size <- c("20%" = .2, "25%" = .25, "30%" = .3,
+                  "35%" = .35, "40%" = .4, "45%" = .45)
+  
+  percentage <- names(sigma_size)[stats::quantile(as.matrix(tdm_sims), sigma_size) > 0][1]
+  
+  
+  # rank_df
+  pseudo_density_df <- EpiCompare::distance_psuedo_density_function(
+    tdm_sims,
+    sigma = percentage, df_out = T) %>%
+    mutate(ranking = rank(psuedo_density,ties.method = "min")) #spelling error... :(
+  
+  assertthat::assert_that(all(!is.na(pseudo_density_df$psuedo_density)),
+                          msg = paste("internal error in",
+                                      "distance_psuedo_density_function",
+                                      "function's sigma selection."))
+  
+  proportion_points_not_included <- 1 - delta_prop
+  
+  top_points <- simulations_group_df_inner %>% 
+    left_join(pseudo_density_df, by = group_names) %>% 
+    mutate(keep = ranking > ceiling(proportion_points_not_included*nrow(simulations_group_df_inner))) %>%
+    ungroup() %>% filter(keep) %>%
+    select(one_of(data_column_names))
+  
+  mm_delta <- get_delta(as.matrix(dist(top_points)))
+  
+  conformal_band_points <- simulations_group_df_inner %>% 
+    left_join(pseudo_density_df, by = group_names) %>% 
+    mutate(keep = ranking > conformal_score_cut) %>%
+    ungroup() %>% filter(keep) %>%
+    select(one_of(data_column_names)) 
+  
+  
+  return(list(conformal_band_points = conformal_band_points,
+              mm_delta = mm_delta))
+}
+
+
+check_file_exists <- function(file_name,dir = ".", .logic = T){
+  files <- list.files(path = dir)
+  detection <- stringr::str_detect(files, pattern = file_name)
+  if (!.logic){
+  return(files[detection])
+  } else {
+    return(any(detection))
+  }
+  
+}
+```
+
+
+## Conformal Calibration Step
+
+```{r}
+
+file_exists <- check_file_exists(sprintf("calibration_information_1d_%s_sims_delta_size_%s.Rdata",
+                                         n_simulations, delta_prop_string), 
+                                 dir = ".")
+
+if (!file_exists | rerun){
+library(parallel)
+library(foreach)
+library(doSNOW)
+max_cores <- parallel::detectCores()
+cl <- makeCluster(max_cores-4)
+registerDoSNOW(cl)
+iterations <- nrow(calibration_set)
+pb <- txtProgressBar(max = iterations, style = 3)
+progress <- function(n) setTxtProgressBar(pb, n)
+opts <- list(progress = progress)
+
+n_sims <- n_simulations
+verbose <- T
+number_points <- 50
+
+calibration_conformal_scores <- foreach(calibration_idx = 1:nrow(calibration_set),
+                                        #.combine = c,
+                                        .options.snow = opts,
+                                        .packages = c("dplyr", "tidyr")) %dopar%{
+  devtools::load_all("../")
+  devtools::load_all("../../EpiCompare")
+
+  x_inner <- calibration_set$x[calibration_idx]
+  obs_inner <- calibration_set[calibration_idx,]
+  
+  inner_sim <- data.frame(x = rep(x_inner, n_sims))
+  inner_sim$y <- sapply(inner_sim$x, function(x) {simulationBands::lei_wasserman_data_conditional_simulate(x, n = 1)[[1]]$sim})
+  inner_sim$idx <- paste0("sim",1:n_sims)
+  inner_sim <- inner_sim %>% group_by(idx)
+ 
+  conformal_score <- simulation_based_conformal_1d(truth_df = obs_inner, 
+                            simulations_grouped_df = inner_sim,
+                            data_column_names = c("y"),
+                            delta_prop = delta_prop)
+
+  
+  
+  return(conformal_score)
+}
+
+conformal_score_vector <- sapply(calibration_conformal_scores, function(x) x$conformal_score)
+mm_delta_vector <- sapply(calibration_conformal_scores, function(x) x$mm_delta)
+
+save(calibration_conformal_scores, 
+     file = sprintf("calibration_information_1d_%s_sims_delta_size_%s.Rdata",
+                                         n_simulations, delta_prop_string))
+
+parallel::stopCluster(cl)
+} else {
+  load(sprintf("calibration_information_1d_%s_sims_delta_size_%s.Rdata",
+                                         n_simulations, delta_prop_string))
+  conformal_score_vector <- sapply(calibration_conformal_scores, function(x) x$conformal_score)
+  mm_delta_vector <- sapply(calibration_conformal_scores, function(x) x$mm_delta)
+}
+```
+
+
+```{r}
+df_conformal_calibration_fit_info <- data.frame(
+           idx = 1:nrow(calibration_set),
+           cs = conformal_score_vector,
+           mm_delta = mm_delta_vector) 
+
+
+df_conformal_calibration_ecdf_info <- data.frame(
+           cs = conformal_score_vector,
+           ecdf = ecdf(conformal_score_vector)(conformal_score_vector))
+
+vis1 <- df_conformal_calibration_fit_info %>%
+  ggplot() +
+  geom_histogram(aes(x = cs)) +
+  labs(x = "simulation conformal score",
+       title = "calibration set")
+
+vis2 <- df_conformal_calibration_ecdf_info %>%
+  ggplot() +
+  geom_line(aes(x = cs, y = ecdf)) +
+  labs(x = "simulation conformal score",
+       y = "empirical cumulative distribution function",
+       title = "calibration set") +
+  ylim(0,1)
+
+vis3 <- df_conformal_calibration_fit_info %>%
+  ggplot() +
+  geom_point(aes(y = cs, x = mm_delta), alpha = .1) +
+  labs(y = "simulation conformal score",
+       x = "delta for delta ball around filament compression points",
+       title = "calibration set")
+
+vis4 <- df_conformal_calibration_fit_info %>%
+  ggplot() +
+  geom_point(aes(x = idx, y = cs)) +
+  xlim(0,20)
+
+vis5 <- df_conformal_calibration_fit_info %>%
+  ggplot() +
+  geom_point(aes(x = idx, y = mm_delta)) +
+  xlim(0,20)
+
+gridExtra::grid.arrange(vis1, vis2,
+                        vis3, vis4, 
+                        vis5,
+                        nrow = 3)
+
+if (save_fig){
+  ggvis <- gridExtra::arrangeGrob(vis1, vis2, nrow = 2)
+  
+  ggplot2::ggsave(plot = ggvis, filename = sprintf("quick_images/simulation_bands_1d_delta_size_%s.png",
+                                                   delta_prop_image_string))
+  }
+```
+## Application to test set
+
+\[
+\alpha \in \{.6,.9\} 
+\]
+
+```{r}
+conformal_score_vector %>% stats::quantile(1-c(.6,.9)) %>% floor()
+ecdf(conformal_score_vector)(99) # .925 ()
+```
+
+
+```{r}
+file_exists <- check_file_exists(sprintf(
+  paste0("conformal_test_information_1d_%s",
+         "_sims_delta_size_%s_confidence_level_%s.Rdata"), 
+  n_simulations, delta_prop_string, confidence_level_string),
+  dir = ".")
+
+if (!file_exists | rerun){
+library(parallel)
+library(foreach)
+library(doSNOW)
+max_cores <- parallel::detectCores()
+cl <- makeCluster(max_cores-4)
+registerDoSNOW(cl)
+iterations <- nrow(test_set)
+pb <- txtProgressBar(max = iterations, style = 3)
+progress <- function(n) setTxtProgressBar(pb, n)
+opts <- list(progress = progress)
+
+n_sims <- n_simulations
+verbose <- T
+number_points <- 50
+
+cut <- conformal_score_vector %>% stats::quantile(1-confidence_level) %>%
+  floor()
+
+calibration_conformal_scores <- foreach(calibration_idx = 1:nrow(test_set),
+                                        #.combine = c,
+                                        .options.snow = opts,
+                                        .packages = c("dplyr", "tidyr")) %dopar%{
+  devtools::load_all("../")
+  devtools::load_all("../../EpiCompare")
+
+  x_inner <- test_set$x[calibration_idx]
+
+  inner_sim <- data.frame(x = rep(x_inner, n_sims))
+  inner_sim$y <- sapply(inner_sim$x, function(x) {simulationBands::lei_wasserman_data_conditional_simulate(x, n = 1)[[1]]$sim})
+  inner_sim$idx <- paste0("sim",1:n_sims)
+  inner_sim <- inner_sim %>% group_by(idx)
+ 
+  conformal_score <- simulation_based_conformal_1d_region(
+                            simulations_grouped_df = inner_sim,
+                            data_column_names = c("y"), 
+                            conformal_score_cut = cut)
+
+  return(conformal_score)
+}
+
+save(calibration_conformal_scores, 
+     file = sprintf(
+  paste0("conformal_test_information_1d_%s",
+         "_sims_delta_size_%s_confidence_level_%s.Rdata"), 
+  n_simulations, delta_prop_string, confidence_level_string))
+
+parallel::stopCluster(cl)
+} else {
+  load(sprintf(
+  paste0("conformal_test_information_1d_%s",
+         "_sims_delta_size_%s_confidence_level_%s.Rdata"), 
+  n_simulations, delta_prop_string, confidence_level_string))
+}
+```
+
+```{r}
+# TODO: update confidence
+file_exists <- check_file_exists(sprintf(
+  paste0("conformal_test_information_discrete_1d_%s",
+         "_sims_delta_size_%s.Rdata"), n_simulations, delta_prop_string), 
+                                 dir = ".")
+
+if (!file_exists | rerun){
+library(parallel)
+library(foreach)
+library(doSNOW)
+max_cores <- parallel::detectCores()
+cl <- makeCluster(max_cores-4)
+registerDoSNOW(cl)
+iterations <- nrow(test_set_discrete)
+pb <- txtProgressBar(max = iterations, style = 3)
+progress <- function(n) setTxtProgressBar(pb, n)
+opts <- list(progress = progress)
+
+n_sims <- n_simulations
+verbose <- T
+number_points <- 50
+
+cut <- conformal_score_vector %>% stats::quantile(1 - confidence_level) %>% floor()
+
+calibration_conformal_scores_discrete <- foreach(calibration_idx = 1:nrow(test_set_discrete),
+                                        #.combine = c,
+                                        .options.snow = opts,
+                                        .packages = c("dplyr", "tidyr")) %dopar%{
+  devtools::load_all("../")
+  devtools::load_all("../../EpiCompare")
+
+  x_inner <- test_set_discrete$x[calibration_idx]
+
+  inner_sim <- data.frame(x = rep(x_inner, n_sims))
+  inner_sim$y <- sapply(inner_sim$x, function(x) {simulationBands::lei_wasserman_data_conditional_simulate(x, n = 1)[[1]]$sim})
+  inner_sim$idx <- paste0("sim", 1:n_sims)
+  inner_sim <- inner_sim %>% group_by(idx)
+ 
+  conformal_score <- simulation_based_conformal_1d_region(
+                            simulations_grouped_df = inner_sim,
+                            data_column_names = c("y"), 
+                            conformal_score_cut = cut,
+                            delta_prop = delta_prop)
+
+  return(conformal_score)
+}
+
+save(calibration_conformal_scores_discrete, 
+     file = sprintf(paste0("conformal_test_information_discrete_1d_%s",
+         "_sims_delta_size_%s.Rdata"), n_simulations, delta_prop_string))
+
+parallel::stopCluster(cl)
+} else {
+  load(sprintf(paste0("conformal_test_information_discrete_1d_%s",
+         "_sims_delta_size_%s.Rdata"), n_simulations, delta_prop_string))
+}
+```
+
+
+### visualization of above
+
+1. do a discrete visualization of region? (should we have done some discretization of the x space anyway?)
+2. Compare with Izbicki cd, 'global' cd and Lei & Wasserman approach (4 breaks)
+   a. for Izbicki cd - the profile approach should use code from our "mass" approach
+
+
+```{r}
+delta_y = .001
+yy <- seq(-8, 8, by = delta_y)
+
+containment_vec <- function(points, yy, radius){
+  # if (nrow(points) == 0){
+  #   return(rep(FALSE, length(yy)))
+  # }
+  nn2_vals <- RANN::nn2(data = as.matrix(points), 
+                        query = as.matrix(yy),
+                        k = 1, 
+                        treetype = "kd")
+  contained <- nn2_vals$nn.dists < radius
+
+  return(contained)
+}
+
+
+
+if (verbose) {
+  pb <- progress::progress_bar$new(
+    format = "Containment calculation [:bar] :percent eta: :eta",
+    total = nrow(test_set_discrete), clear = FALSE, width = 80)
+}
+
+df_grid_all <- data.frame()
+df_containment_prop_all <- data.frame()
+
+
+for (calibration_idx in 1:nrow(test_set_discrete)){
+  # for visual
+  x_inner <- test_set_discrete$x[calibration_idx]
+  points <- calibration_conformal_scores_discrete[[calibration_idx]]$conformal_band_points
+  radius <- calibration_conformal_scores_discrete[[calibration_idx]]$mm_delta
+  contained <- containment_vec(points, yy, radius)
+  
+  df_inner <- data.frame(
+             calibration_idx = calibration_idx,
+             x = x_inner,
+             y = yy,
+             contained = contained)
+  df_grid_all <- rbind(df_grid_all, df_inner)
+  
+  if (verbose) {
+      pb$tick()
+  }
+  
+  # for containment of true observations:
+  inner_sim_y <- sapply(rep(x_inner, n_sims_containment), 
+    function(x) {
+      simulationBands::lei_wasserman_data_conditional_simulate(x, n = 1)[[1]]$sim})
+  contained_check <- containment_vec(points, inner_sim_y, radius)
+  df_containment_prop_inner <- data.frame(
+    x = x_inner,
+    containment_prop = mean(contained_check))
+  df_containment_prop_all <- rbind(df_containment_prop_all, 
+                                   df_containment_prop_inner)
+}
+
+vis1 <- df_grid_all %>% filter(contained) %>% 
+  ggplot() + 
+  geom_point(data = test_set, aes(x = x, y = y), color = "blue") + 
+  geom_tile(aes(x = x, y = y), alpha = .5) +
+  labs(title = sprintf(paste("Simulation-based\nConformal Inference",
+                              "Prediction Regions (%s)"), 
+                       confidence_level_string)) +
+  xlim(-1.5, 1.5) + ylim(-8,8) +
+  theme_minimal()
+
+vis2 <- df_containment_prop_all %>%
+  ggplot() +
+  geom_line(aes(x = x, y = containment_prop)) +
+  ylim(0,1) + xlim(-1.5, 1.5)  +
+  geom_hline(yintercept = confidence_level, color = "blue") +
+  geom_label(data = data.frame(x = 1.5, y = confidence_level, 
+                               label = confidence_level),
+             aes(x = x, y = y, label = label)) +
+  labs(y = "containment proportion",
+       title = sprintf(paste("containment proportion of %s ys\nrandomly",
+                             "sampled per x value"),n_sims_containment)) +
+  theme_minimal()
+  
+
+gridExtra::grid.arrange(vis1, vis2, 
+             layout_matrix = matrix(c(1,1,1,1,
+                                      1,1,1,1,
+                                      1,1,1,1,
+                                      2,2,2,2,
+                                      2,2,2,2), byrow = T, ncol = 4))
+
+if (save_image){
+  ggvis <- gridExtra::arrangeGrob(vis1, vis2, 
+             layout_matrix = matrix(c(1,1,1,1,
+                                      1,1,1,1,
+                                      1,1,1,1,
+                                      2,2,2,2,
+                                      2,2,2,2), byrow = T, ncol = 4))
+  ggplot2::ggsave(plot = ggvis, 
+                  filename = 
+                    sprintf(paste0("quick_images/sim_bands_conf",
+                                   "_test_discrete_1d_%s",
+                                   "_sims_delta_size_%s_confidence_level_%s.png"),
+                            n_simulations, delta_prop_image_string, 
+                            confidence_level_image_string))
+}
+```
+
+## Discrete CDE based approaches
+
+## "Global" CD approach
+
+The approach here will be similar to what a has done before - in a discrete fashion.
+
+
+```{r}
+calibration_info <- calibration_set
+calibration_info$calibration_cde_values <- sapply(1:nrow(calibration_set),
+  function(r_idx){
+    simulationBands::cde_lei_wassserman(calibration_set$x[r_idx])(calibration_set$y[r_idx])
+                                 })
+```
+
+```{r}
+cutoff_g_cd <- stats::quantile(calibration_info$calibration_cde_values, 
+                               1- confidence_level) 
+```
+
+
+```{r}
+delta_y = .001
+yy <- seq(-8, 8, by = delta_y)
+
+if (verbose) {
+  pb <- progress::progress_bar$new(
+    format = "Containment calculation [:bar] :percent eta: :eta",
+    total = nrow(test_set_discrete), clear = FALSE, width = 80)
+}
+
+df_grid_all_g_cd <- data.frame()
+df_containment_prop_all_g_cd <- data.frame()
+
+
+for (calibration_idx in 1:nrow(test_set_discrete)){
+  # for visual
+  x_inner <- test_set_discrete$x[calibration_idx]
+  cde_values <- simulationBands::cde_lei_wassserman(x_inner)(yy)
+  contained <- cde_values > cutoff_g_cd
+  
+  df_inner <- data.frame(
+             calibration_idx = calibration_idx,
+             x = x_inner,
+             y = yy,
+             contained = contained,
+             cde = cde_values)
+  df_grid_all_g_cd <- rbind(df_grid_all_g_cd, df_inner)
+  
+  if (verbose) {
+      pb$tick()
+  }
+  
+  # for containment of true observations:
+  inner_sim_y <- sapply(rep(x_inner, n_sims_containment), 
+    function(x) {
+      simulationBands::lei_wasserman_data_conditional_simulate(x, n = 1)[[1]]$sim})
+  sim_cde_values <- simulationBands::cde_lei_wassserman(x_inner)(inner_sim_y)
+  contained_check <- sim_cde_values > cutoff_g_cd
+  df_containment_prop_inner <- data.frame(
+    x = x_inner,
+    containment_prop = mean(contained_check))
+  df_containment_prop_all_g_cd <- rbind(df_containment_prop_all_g_cd, 
+                                   df_containment_prop_inner)
+}
+```
+
+
+```{r}
+# TODO: update confidence
+vis1g <- df_grid_all_g_cd %>% filter(contained) %>% 
+  ggplot() + 
+  geom_point(data = test_set, aes(x = x, y = y), color = "blue") + 
+  geom_tile(aes(x = x, y = y), alpha = .5) +
+  labs(title = sprintf(paste("\"Global\" CD*\nConformal",
+                             "Inference Prediction Regions (%s)"),
+                       confidence_level_string)) +
+  xlim(-1.5,1.5) + ylim(-8,8) +
+  theme_minimal()
+
+vis2g <- df_containment_prop_all_g_cd %>%
+  ggplot() +
+  geom_line(aes(x = x, y = containment_prop)) +
+  ylim(0,1) + xlim(-1.5,1.5) +
+  geom_hline(yintercept = confidence_level, color = "blue") +
+  geom_label(data = data.frame(x = 1.5, y = confidence_level, 
+                               label = confidence_level),
+             aes(x = x, y = y, label = label)) +
+  labs(y = "containment proportion",
+       title = sprintf(paste("containment proportion of",
+                             "%s ys\nrandomly sampled per x value"),
+                       n_sims_containment)) +
+  theme_minimal()
+  
+
+gridExtra::grid.arrange(vis1g, vis2g, 
+             layout_matrix = matrix(c(1,1,1,1,
+                                      1,1,1,1,
+                                      1,1,1,1,
+                                      2,2,2,2,
+                                      2,2,2,2), byrow = T, ncol = 4))
+
+
+if (save_image){
+  ggvis <- gridExtra::arrangeGrob(vis1g, vis2g, 
+             layout_matrix = matrix(c(1,1,1,1,
+                                      1,1,1,1,
+                                      1,1,1,1,
+                                      2,2,2,2,
+                                      2,2,2,2), byrow = T, ncol = 4))
+  ggplot2::ggsave(plot = ggvis, 
+                  filename = sprintf(paste0("quick_images/sim_bands_conf",
+                                   "_test_discrete_1d_g_cd_%s",
+                                   "_sims_delta_size_%s_confidence_level_%s.png"),
+                            n_simulations, delta_prop_image_string, 
+                            confidence_level_image_string))
+}
+```
+
+## Lei & Wasserman 
+
+We're going to break X in 8 bins (the same number as Figure 4, Lei2014)
+
+```{r message = F} 
+cutoff_lei_wasserman <- calibration_info %>% 
+  mutate(x_cut = cut(x, breaks = seq(-1.5, 1.5, length.out = 9)),
+         x_cut_lower = cut_to_numeric(x_cut,.lower = T),
+         x_cut_upper = cut_to_numeric(x_cut,.lower = F)) %>%
+  group_by(x_cut, x_cut_lower, x_cut_upper) %>%
+  summarize(cutoff_lei_wasserman = quantile(calibration_cde_values, 
+                                            1 - confidence_level))
+```
+
+
+```{r}
+delta_y = .001
+yy <- seq(-8, 8, by = delta_y)
+
+if (verbose) {
+  pb <- progress::progress_bar$new(
+    format = "Containment calculation [:bar] :percent eta: :eta",
+    total = nrow(test_set_discrete), clear = FALSE, width = 80)
+}
+
+df_grid_all_lw_cd <- data.frame()
+df_containment_prop_all_lw_cd <- data.frame()
+
+
+for (calibration_idx in 1:nrow(test_set_discrete)){
+  # for visual
+  x_inner <- test_set_discrete$x[calibration_idx]
+  cde_values <- simulationBands::cde_lei_wassserman(x_inner)(yy)
+  
+  group_id <- cut(x_inner, breaks = seq(-1.5, 1.5, length.out = 9))
+  inner_cutoff <- cutoff_lei_wasserman$cutoff_lei_wasserman[cutoff_lei_wasserman$x_cut == group_id]
+  contained <- cde_values > inner_cutoff
+  
+  df_inner <- data.frame(
+             calibration_idx = calibration_idx,
+             x = x_inner,
+             y = yy,
+             contained = contained)
+  df_grid_all_lw_cd <- rbind(df_grid_all_lw_cd, df_inner)
+  
+  if (verbose) {
+      pb$tick()
+  }
+  
+  # for containment of true observations:
+  inner_sim_y <- sapply(rep(x_inner, n_sims_containment), 
+    function(x) {
+      simulationBands::lei_wasserman_data_conditional_simulate(x, n = 1)[[1]]$sim})
+  sim_cde_values <- simulationBands::cde_lei_wassserman(x_inner)(inner_sim_y)
+  contained_check <- sim_cde_values > inner_cutoff
+  df_containment_prop_inner <- data.frame(
+    x = x_inner,
+    containment_prop = mean(contained_check))
+  df_containment_prop_all_lw_cd <- rbind(df_containment_prop_all_lw_cd, 
+                                   df_containment_prop_inner)
+}
+```
+
+```{r}
+vis1lw <- df_grid_all_lw_cd %>% filter(contained) %>% 
+  ggplot() + 
+  geom_point(data = test_set, aes(x = x, y = y), color = "blue") + 
+  geom_tile(aes(x = x, y = y), alpha = .5) +
+  labs(title = sprintf(paste("Lei and Wasserman (2014) ~Local~\nConformal",
+                             "Inference Prediction Regions (%s)"),
+                       confidence_level_string)) +
+  xlim(-1.5,1.5) + ylim(-8,8) +
+  theme_minimal()
+
+vis2lw <- df_containment_prop_all_lw_cd %>%
+  ggplot() +
+  geom_line(aes(x = x, y = containment_prop)) +
+  ylim(0,1) + xlim(-1.5,1.5) +
+  geom_hline(yintercept = confidence_level, color = "blue") +
+  geom_label(data = data.frame(x = 1.5, y = confidence_level, 
+                               label = confidence_level),
+             aes(x = x, y = y, label = label)) +
+  labs(y = "containment proportion",
+       title = sprintf(paste("containment proportion of %s",
+                     "ys\nrandomly sampled per x value"),
+                     n_sims_containment)) +
+  theme_minimal()
+  
+
+gridExtra::grid.arrange(vis1lw, vis2lw, 
+             layout_matrix = matrix(c(1,1,1,1,
+                                      1,1,1,1,
+                                      1,1,1,1,
+                                      2,2,2,2,
+                                      2,2,2,2), byrow = T, ncol = 4))
+
+if (save_image){
+  ggvis <- gridExtra::arrangeGrob(vis1lw, vis2lw, 
+             layout_matrix = matrix(c(1,1,1,1,
+                                      1,1,1,1,
+                                      1,1,1,1,
+                                      2,2,2,2,
+                                      2,2,2,2), byrow = T, ncol = 4))
+  ggplot2::ggsave(plot = ggvis, 
+                  filename = sprintf(paste0("quick_images/sim_bands_conf",
+                                   "_test_discrete_1d_lw_cd_%s",
+                                   "_sims_delta_size_%s_confidence_level_%s.png"),
+                            n_simulations, delta_prop_image_string, 
+                            confidence_level_image_string))
+}
+```
+
+## Izbicki 2020
+
+```{r}
+delta_y = .001
+yy <- seq(-8, 8, by = delta_y)
+
+n_sims <- n_simulations
+
+if (verbose) {
+  pb <- progress::progress_bar$new(
+    format = "Containment calculation [:bar] :percent eta: :eta",
+    total = nrow(calibration_set), clear = FALSE, width = 80)
+}
+
+df_grid_all_g_cd_calibration_set <- data.frame()
+df_containment_prop_all_g_cd_calibration_set <- data.frame()
+
+
+for (calibration_idx in 1:nrow(calibration_set)){
+  # for visual
+  x_inner <- calibration_set$x[calibration_idx]
+  cde_values <- simulationBands::cde_lei_wassserman(x_inner)(yy)
+  contained <- cde_values > cutoff_g_cd
+  
+  df_inner <- data.frame(
+             calibration_idx = calibration_idx,
+             x = x_inner,
+             y = yy,
+             contained = contained,
+             cde = cde_values)
+  df_grid_all_g_cd_calibration_set <- rbind(df_grid_all_g_cd_calibration_set, df_inner)
+  
+  if (verbose) {
+      pb$tick()
+  }
+  
+  # for containment of true observations:
+  inner_sim_y <- sapply(rep(x_inner, n_sims_containment), 
+    function(x) {
+      simulationBands::lei_wasserman_data_conditional_simulate(x, n = 1)[[1]]$sim})
+  sim_cde_values <- simulationBands::cde_lei_wassserman(x_inner)(inner_sim_y)
+  contained_check <- sim_cde_values > cutoff_g_cd
+  df_containment_prop_inner <- data.frame(
+    x = x_inner,
+    containment_prop = mean(contained_check))
+  df_containment_prop_all_g_cd_calibration_set <-
+    rbind(df_containment_prop_all_g_cd_calibration_set, 
+                                   df_containment_prop_inner)
+}
+```
+
+
+```{r}
+#yy
+t_range <- range(df_grid_all_g_cd_calibration_set$cde)
+n_levels <- 1000
+t_grid <- seq(0, t_range[2], length.out = n_levels)
+
+n_calibrate <- length(unique(df_grid_all_g_cd_calibration_set$calibration_idx))
+n_y <- length(yy)
+n_t <- length(t_grid)
+k <- max(round(n_calibrate/100),1)
+
+g_calibrate_cde <- matrix(NA, n_calibrate,
+                      n_t)
+
+if (verbose) {
+  pb <- progress::progress_bar$new(
+    format = "Make Profile Matrix (Calibration) [:bar] :percent eta: :eta",
+    total = n_calibrate, clear = FALSE, width = 80)
+}
+
+for (calibration_idx in 1:n_calibrate){
+  cde_values <- df_grid_all_g_cd_calibration_set$cde[df_grid_all_g_cd_calibration_set$calibration_idx == calibration_idx]
+  g_calibrate_cde[calibration_idx,] <- predictionBands:::profile_density(t_grid, yy,
+                                      cde_values)
+  
+  if (verbose) {
+      pb$tick()
+  }
+}
+
+kmeans_result <- try(LICORS::kmeanspp(g_train_cde,k=k),
+                     silent = TRUE)
+if(class(kmeans_result)=="try-error")
+{
+  kmeans_result <- kmeans(g_train_cde,centers = k)
+}
+centers_kmeans <- kmeans_result$centers
+
+which_partition_calibration <- predictionBands:::which_neighbors(centers_kmeans,
+                                         g_calibrate_cde,1)
+
+calibration_info$partition_id <- which_partition_calibration
+
+rm(g_calibrate_cde)
+```
+
+
+```{r}
+n_test <- length(unique(df_grid_all_g_cd$calibration_idx))
+
+g_test_cde <- matrix(NA, n_test,
+                      n_t)
+
+if (verbose) {
+  pb <- progress::progress_bar$new(
+    format = "Make Profile Matrix (Test) [:bar] :percent eta: :eta",
+    total = n_test, clear = FALSE, width = 80)
+}
+
+for (calibration_idx in 1:n_test){
+  cde_values <- df_grid_all_g_cd$cde[df_grid_all_g_cd$calibration_idx == calibration_idx]
+  g_test_cde[calibration_idx,] <- predictionBands:::profile_density(t_grid, yy,
+                                      cde_values)
+  
+  if (verbose) {
+      pb$tick()
+  }
+}
+
+which_partition_test <- predictionBands:::which_neighbors(centers_kmeans,
+                                         g_test_cde,1)
+
+
+```
+
+```{r message = F} 
+cutoff_izbicki <- calibration_info %>%
+  mutate(partition_id = as.numeric(partition_id)) %>%
+  group_by(partition_id) %>%
+  summarize(cutoff_izbicki = quantile(calibration_cde_values, 
+                                      1 - confidence_level))
+```
+
+
+```{r}
+delta_y = .001
+yy <- seq(-8, 8, by = delta_y)
+
+if (verbose) {
+  pb <- progress::progress_bar$new(
+    format = "Containment calculation [:bar] :percent eta: :eta",
+    total = nrow(test_set_discrete), clear = FALSE, width = 80)
+}
+
+df_grid_all_iz_cd <- data.frame()
+df_containment_prop_all_iz_cd <- data.frame()
+
+
+for (calibration_idx in 1:nrow(test_set_discrete)){
+  # for visual
+  x_inner <- test_set_discrete$x[calibration_idx]
+  cde_values <- simulationBands::cde_lei_wassserman(x_inner)(yy)
+  
+  partition_id <- which_partition_test[calibration_idx]
+  inner_cutoff <- cutoff_izbicki$cutoff_izbicki[cutoff_izbicki$partition_id == partition_id]
+  contained <- cde_values > inner_cutoff
+  
+  df_inner <- data.frame(
+             calibration_idx = calibration_idx,
+             x = x_inner,
+             y = yy,
+             contained = contained)
+  df_grid_all_iz_cd <- rbind(df_grid_all_iz_cd, df_inner)
+  
+  if (verbose) {
+      pb$tick()
+  }
+  
+  # for containment of true observations:
+  inner_sim_y <- sapply(rep(x_inner, n_sims_containment), 
+    function(x) {
+      simulationBands::lei_wasserman_data_conditional_simulate(x, n = 1)[[1]]$sim})
+  sim_cde_values <- simulationBands::cde_lei_wassserman(x_inner)(inner_sim_y)
+  contained_check <- sim_cde_values > inner_cutoff
+  df_containment_prop_inner <- data.frame(
+    x = x_inner,
+    containment_prop = mean(contained_check))
+  df_containment_prop_all_iz_cd <- rbind(df_containment_prop_all_iz_cd, 
+                                   df_containment_prop_inner)
+}
+```
+
+
+```{r}
+vis1iz <- df_grid_all_iz_cd %>% filter(contained) %>% 
+  ggplot() + 
+  geom_point(data = test_set, aes(x = x, y = y), color = "blue") + 
+  geom_tile(aes(x = x, y = y), alpha = .5) +
+  labs(title = sprintf(paste0("Izbicki et. al (2020) ~Local~\n",
+                              "Conformal Inference Prediction Regions (%s)"),
+                       confidence_level_string)) +
+  xlim(-1.5,1.5) + ylim(-8,8) +
+  theme_minimal()
+
+vis2iz <- df_containment_prop_all_iz_cd %>%
+  ggplot() +
+  geom_line(aes(x = x, y = containment_prop)) +
+  ylim(0,1) + xlim(-1.5,1.5) +
+  geom_hline(yintercept = confidence_level, color = "blue") +
+  geom_label(data = data.frame(x = 1.5, y = confidence_level, 
+                               label = confidence_level),
+             aes(x = x, y = y, label = label)) +
+  labs(y = "containment proportion",
+       title = sprintf(paste("containment proportion of %s",
+                             "ys\nrandomly sampled per x value"),
+                       n_sims_containment)) +
+  theme_minimal()
+  
+
+gridExtra::grid.arrange(vis1iz, vis2iz, 
+             layout_matrix = matrix(c(1,1,1,1,
+                                      1,1,1,1,
+                                      1,1,1,1,
+                                      2,2,2,2,
+                                      2,2,2,2), byrow = T, ncol = 4))
+
+if (save_image){
+  ggvis <- gridExtra::arrangeGrob(vis1iz, vis2iz, 
+             layout_matrix = matrix(c(1,1,1,1,
+                                      1,1,1,1,
+                                      1,1,1,1,
+                                      2,2,2,2,
+                                      2,2,2,2), byrow = T, ncol = 4))
+  ggplot2::ggsave(plot = ggvis, sprintf(paste0("quick_images/sim_bands_conf",
+                                   "_test_discrete_1d_iz_cd_%s",
+                                   "_sims_delta_size_%s_confidence_level_%s.png"),
+                            n_simulations, delta_prop_image_string, 
+                            confidence_level_image_string))
+}
+```
+
+# all together
+
+```{r fig.width = 17, fig.height = 8}
+# TODO: update confidence
+gridExtra::grid.arrange(grobs = list(
+              vis1g, vis1lw, vis1iz, vis1,
+              vis2g, vis2lw, vis2iz, vis2) %>% 
+               lapply(function(g){g + theme(text = element_text(size = 15),
+                                            plot.title = element_text(size = 22))}),
+             layout_matrix = matrix(c(1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      5,5,5,5,6,6,6,6,7,7,7,7,8,8,8,8,
+                                      5,5,5,5,6,6,6,6,7,7,7,7,8,8,8,8),
+                                    ncol = 4*4, byrow = T), 
+             bottom = paste("*a \"global\" version of",
+                            "Izbicki et. al 2020's CD approach."))
+
+if (save_image){
+  ggvis <- gridExtra::arrangeGrob(grobs = list(
+              vis1g, vis1lw, vis1iz, vis1,
+              vis2g, vis2lw, vis2iz, vis2) %>% 
+               lapply(function(g){g + theme(text = element_text(size = 6),
+                                            plot.title = element_text(size = 12))}),
+             layout_matrix = matrix(c(1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      5,5,5,5,6,6,6,6,7,7,7,7,8,8,8,8,
+                                      5,5,5,5,6,6,6,6,7,7,7,7,8,8,8,8),
+                                    ncol = 4*4, byrow = T),
+             bottom = paste("*a \"global\" version of",
+                            "Izbicki et. al 2020's CD approach."))
+  ggplot2::ggsave(plot = ggvis, width = 17, height = 8,
+                  filename = sprintf(paste0("quick_images/sim_bands_conf",
+                                   "_test_discrete_1d_options_%s",
+                                   "_sims_delta_size_%s_confidence_level_%s.png"),
+                            n_simulations, delta_prop_image_string, 
+                            confidence_level_image_string))
+}
+```
+
+
