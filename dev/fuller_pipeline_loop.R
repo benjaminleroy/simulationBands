@@ -21,7 +21,7 @@ library(gridExtra)
 library(latex2exp)
 library(flexmix)
 
-devtools::load_all(path = "../../") # simulationBands
+devtools::load_all(path = ".") # simulationBands
 
 ### Defaults
 theme_set(theme_minimal() +
@@ -150,13 +150,13 @@ if (data_name %in% c("y", "y2")){
 }
 
 if (conformal_mass_perfect){
-  n_conformal <- conformal_calibration_dist_mass
-  conformal_calibration_dist_mass <- 1:n/n
+  n_conformal <- length(conformal_calibration_dist_mass)
+  conformal_calibration_dist_mass <- 1:n_conformal/n_conformal
 }
 
 # true x selection ----------------------------
 
-if (data_name == "y"){
+if (data_name %in% c("y", "y2")){
   x <- 9.5
 } else { #data_name == "lw"
   x <- .75
