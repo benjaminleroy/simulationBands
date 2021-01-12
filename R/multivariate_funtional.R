@@ -58,7 +58,6 @@ maxmin_inner_old <- function(df_row, df_col){
 }
 
 
-
 #' minimum distance to contain all points of first set with union of balls of
 #' second set
 #'
@@ -171,4 +170,5 @@ maxmin_distance_vector <- function(truth_df, simulations_grouped_df,
     return(list(mm_df, dist_info_df))
   }
 }
+
 

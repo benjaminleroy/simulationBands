@@ -3,6 +3,7 @@
 export("%>%")
 export(cde_and_mass_lei_wasserman_discrete)
 export(cde_lei_wassserman)
+export(check_file_exists)
 export(conformal_pdf_breaks)
 export(conformal_scores_lei_wasserman)
 export(create_S_b_matrix)

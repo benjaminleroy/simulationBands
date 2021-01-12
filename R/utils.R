@@ -25,3 +25,28 @@ cut_to_numeric <- function(id, .lower = TRUE){
 
   return(out_numeric)
 }
+
+
+#' check if a file exists with a certain name in a certain directory
+#'
+#' Uses \code{stringr::str_detect}, if you want exact, use \code{^} and \code{$}
+#' before and after your string
+#'
+#' @param file_name file name or part of string name (if not unique will just
+#' check that at least a single file matches the provided name)
+#' @param dir file directory (default is current directory)
+#' @param .logic boolean - if should return a boolean (\code{TRUE}) or should
+#' return a vector a files that match \code{file_name} string (\code{FALSE}).
+#'
+#' @return see \code{.logic} parameter.
+#' @export
+check_file_exists <- function(file_name,dir = ".", .logic = T){
+  files <- list.files(path = dir)
+  detection <- stringr::str_detect(files, pattern = file_name)
+  if (!.logic){
+    return(files[detection])
+  } else {
+    return(any(detection))
+  }
+
+}
