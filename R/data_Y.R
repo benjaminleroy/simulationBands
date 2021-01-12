@@ -26,15 +26,15 @@ generate_split_mixture <- function(n = 1500,
                                    right_intercept = c(0,0),
                                    right_sd = c(1,1),
                                    right_proportions = c(.5,.5)){
-  right_X <- runif(n = floor(2/3*n), min = -1, max = 10)
+  right_X <- stats::runif(n = floor(2/3*n), min = -1, max = 10)
   right_y <- gen_mix_reg(x = right_X,
                          beta = right_beta,
                          intercept = right_intercept,
                          sd = right_sd,
                          proportions = right_proportions)
 
-  left_X <- runif(n = n - floor(2/3*n), min = -6,-1)
-  left_y <- rnorm(n = n - floor(2/3*n))
+  left_X <- stats::runif(n = n - floor(2/3*n), min = -6,-1)
+  left_y <- stats::rnorm(n = n - floor(2/3*n))
 
   data_all <- data.frame(x = c(right_X, left_X),
                          y = c(right_y, left_y))
@@ -49,10 +49,10 @@ generate_split_mixture <- function(n = 1500,
 #' (p1,p2) = right_proportions
 #'
 #' @param x x values
-#' @param right_beta vector length 2, see above
-#' @param right_intercept vector length 2, see above
-#' @param right_sd vector length 2, see above
-#' @param right_proportions vector length 2, see above
+#' @param beta vector length 2, see above
+#' @param intercept vector length 2, see above
+#' @param sd vector length 2, see above
+#' @param proportions vector length 2, see above
 #'
 #' @return data frame (x,y) sampled from the above distribution
 #' @export
@@ -73,7 +73,7 @@ gen_mix_reg <- function(x, beta = c(-1,1),
   intercept_x <- intercept[group_id]
   sd_x <- sd[group_id]
 
-  return(intercept_x + beta_x * x + rnorm(n = length(x), sd = sd_x))
+  return(intercept_x + beta_x * x + stats::rnorm(n = length(x), sd = sd_x))
 }
 
 
@@ -85,10 +85,10 @@ gen_mix_reg <- function(x, beta = c(-1,1),
 #'
 #' @param y can be a vector
 #' @param x_val a single value
-#' @param right_beta vector length 2, see above
-#' @param right_intercept vector length 2, see above
-#' @param right_sd vector length 2, see above
-#' @param right_proportions vector length 2, see above
+#' @param beta vector length 2, see above
+#' @param intercept vector length 2, see above
+#' @param sd vector length 2, see above
+#' @param proportions vector length 2, see above
 #'
 #' @return conditional pdf values for y vector
 multimode_density_f <- function(y, x_val, beta = c(-1,1),
@@ -97,7 +97,7 @@ multimode_density_f <- function(y, x_val, beta = c(-1,1),
                                 proportions = c(.5,.5)){
   means <- beta * x_val + intercept
 
-  prob <- t(dnorm(t(matrix(rep(y, each = 2), ncol = 2, byrow = T)),
+  prob <- t(stats::dnorm(t(matrix(rep(y, each = 2), ncol = 2, byrow = T)),
                   sd = sd, mean =  means)) %*%
     matrix(proportions, nrow = 2)
   return(prob)
@@ -132,7 +132,7 @@ multimodel_density_split_mixture <- function(y, x_val,
                                 sd = right_sd,
                                 proportions = right_proportions)
   } else {
-    prob <- dnorm(y, mean = 0, sd = 1)
+    prob <- stats::dnorm(y, mean = 0, sd = 1)
   }
 
   return(prob)

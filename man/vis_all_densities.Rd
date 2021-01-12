@@ -22,7 +22,7 @@ true, fit values}
 \item{scale}{boolean if we should normalize the solution}
 }
 \value{
-
+visualization plot
 }
 \description{
 compare all densities visually (true, fit, conformal_pdf)

@@ -18,13 +18,13 @@ multimode_density_f(
 
 \item{x_val}{a single value}
 
-\item{right_beta}{vector length 2, see above}
+\item{beta}{vector length 2, see above}
 
-\item{right_intercept}{vector length 2, see above}
+\item{intercept}{vector length 2, see above}
 
-\item{right_sd}{vector length 2, see above}
+\item{sd}{vector length 2, see above}
 
-\item{right_proportions}{vector length 2, see above}
+\item{proportions}{vector length 2, see above}
 }
 \value{
 conditional pdf values for y vector

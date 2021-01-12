@@ -81,12 +81,12 @@ inner_sigma <- function(x){
 #' @export
 #'
 lei_wasserman_data <- function(n = 1000, sigma_function = inner_sigma){
-  x <- runif(n = n, min = -1.5, 1.5)
+  x <- stats::runif(n = n, min = -1.5, 1.5)
   group_id <- sample(c(1,2), replace = T, size = n)
 
   mu <- inner_mixture(x, group_id)
   sigma <- sigma_function(x)
-  y <- rnorm(n = n,
+  y <- stats::rnorm(n = n,
              mean = mu, sd = sigma )
 
   return(data.frame(x = x,
@@ -141,7 +141,7 @@ lei_wasserman_data_conditional_simulate <- function(x, n = 200,
 
     mu <- inner_mixture(xx, group_id)
     sigma <- sigma_function(xx)
-    yy <- rnorm(n = n,
+    yy <- stats::rnorm(n = n,
                 mean = mu, sd = sigma )
 
     sim_list[[id]] <- data.frame(x = xx,
@@ -190,8 +190,8 @@ cde_lei_wassserman <- function(x) {
   sigma <- inner_sigma(x)
 
   marginal_cde <- function(y) {
-    1/2 * dnorm(y, mean = mu[1], sd = sigma) +
-      1/2 * dnorm(y, mean = mu[2], sd = sigma)
+    1/2 * stats::dnorm(y, mean = mu[1], sd = sigma) +
+      1/2 * stats::dnorm(y, mean = mu[2], sd = sigma)
   }
   return(marginal_cde)
 }

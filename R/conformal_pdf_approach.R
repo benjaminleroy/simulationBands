@@ -73,9 +73,8 @@ create_S_b_matrix <- function(n, prob_cde, prime = FALSE){
 #' a good reason).
 #' @param prime boolean if we should return S' and b'
 #'
-#' @return
+#' @return solution of above equation
 #' @export
-#'
 stepwise_conformal_cde_update <- function(n, prob_cde,
                                           lambda = -1,
                                           alpha = 0,
@@ -201,6 +200,8 @@ stepwise_conformal_cde_update <- function(n, prob_cde,
 #'   \item{\code{cut_off_upper}:}{ upper threshold from \code{g_id} as scalar}
 #'}
 #' @export
+#'
+#' @importFrom rlang .data
 conformal_pdf_breaks <- function(individual_df, split_conformal_info_vector,
                                  conformal_score = c("cde", "mass")){
   if (length(conformal_score) >  1){
@@ -214,14 +215,14 @@ conformal_pdf_breaks <- function(individual_df, split_conformal_info_vector,
     inner_levels_density <- sort(split_conformal_info_vector)
 
     individual_df_all <-individual_df %>%
-      mutate(g_id = cut(fit_density,
+      dplyr::mutate(g_id = cut(.data$fit_density,
                         breaks = c(-Inf, inner_levels_density, Inf)),
-             g_id2 = cut(fit_density,
+             g_id2 = cut(.data$fit_density,
                          breaks = c(-Inf, inner_levels_density, Inf),
                          labels = F),
-             g_id3 = g_id2/max(g_id2),
-             cut_off_lower = cut_to_numeric(g_id, .lower =  TRUE),
-             cut_off_upper = cut_to_numeric(g_id, .lower = FALSE))
+             g_id3 = .data$g_id2/max(.data$g_id2),
+             cut_off_lower = cut_to_numeric(.data$g_id, .lower =  TRUE),
+             cut_off_upper = cut_to_numeric(.data$g_id, .lower = FALSE))
   } else {# conformal_score == "mass"
     mass_inner_levels <- sort(split_conformal_info_vector)
 
@@ -238,18 +239,18 @@ conformal_pdf_breaks <- function(individual_df, split_conformal_info_vector,
     }
 
     individual_df_all <- individual_df %>%
-      arrange(fit_density) %>%
-      mutate(proportion_above = 1 - cumsum(fit_density)*delta_y)
+      dplyr::arrange(.data$fit_density) %>%
+      dplyr::mutate(proportion_above = 1 - cumsum(.data$fit_density)*delta_y)
 
     individual_df_all <- individual_df_all %>%
-      mutate(g_id = cut(proportion_above,
+      dplyr::mutate(g_id = cut(.data$proportion_above,
                         breaks = c(-Inf, mass_inner_levels, Inf)),
-             g_id2 = cut(proportion_above,
+             g_id2 = cut(.data$proportion_above,
                          breaks = c(-Inf, mass_inner_levels, Inf),
                          labels = F),
-             g_id3 = g_id2/max(g_id2),
-             cut_off_lower = cut_to_numeric(g_id, .lower =  TRUE),
-             cut_off_upper = cut_to_numeric(g_id, .lower = FALSE))
+             g_id3 = .data$g_id2/max(.data$g_id2),
+             cut_off_lower = cut_to_numeric(.data$g_id, .lower =  TRUE),
+             cut_off_upper = cut_to_numeric(.data$g_id, .lower = FALSE))
   }
 
   return(individual_df_all)
@@ -299,7 +300,7 @@ cumulative_comparisons <- function(individual_df_rich,
 
 
   cumulative_df <- individual_df_rich  %>%
-    dplyr::group_by_at(vars(group_columns)) %>%
+    dplyr::group_by_at(dplyr::vars(group_columns)) %>%
     dplyr::summarize(fit_prop = sum(.data$fit_density)*delta_y,
                      true_prop = sum(.data$true_density)*delta_y) %>%
     dplyr::ungroup() %>%
@@ -310,7 +311,7 @@ cumulative_comparisons <- function(individual_df_rich,
     dplyr::mutate(cum_true_prop = cumsum(.data$true_prop), # true prop
                   true_prop_lag = dplyr::lag(.data$true_prop, default = 0),
                   cum_true_prop_lag = cumsum(.data$true_prop_lag)) %>%
-    dplyr::mutate(true_prob_above_lower = 1- cum_true_prop_lag)
+    dplyr::mutate(true_prob_above_lower = 1- .data$cum_true_prop_lag)
 
   return(cumulative_df)
 }

@@ -16,10 +16,20 @@ Suggests:
     knitr,
     rmarkdown
 Imports:
+    assertthat,
     dplyr,
     ggplot2,
+    ks,
+    pracma,
+    progress,
+    purrr,
+    quadprog,
+    RANN,
+    rlang,
     stringr,
+    stats,
     testthat,
     tidyr,
-    tidyselect
+    tidyselect,
+    magrittr
 VignetteBuilder: knitr

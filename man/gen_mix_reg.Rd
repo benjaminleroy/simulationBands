@@ -15,13 +15,13 @@ gen_mix_reg(
 \arguments{
 \item{x}{x values}
 
-\item{right_beta}{vector length 2, see above}
+\item{beta}{vector length 2, see above}
 
-\item{right_intercept}{vector length 2, see above}
+\item{intercept}{vector length 2, see above}
 
-\item{right_sd}{vector length 2, see above}
+\item{sd}{vector length 2, see above}
 
-\item{right_proportions}{vector length 2, see above}
+\item{proportions}{vector length 2, see above}
 }
 \value{
 data frame (x,y) sampled from the above distribution

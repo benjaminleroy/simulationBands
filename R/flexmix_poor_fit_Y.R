@@ -30,8 +30,8 @@ simulation_nonconformal_mass_score_mix_reg <- function(x,y, model_params, sim_nu
                           proportions = model_params$prop)
 
   density_estimate <- ks::kde(y_values, h = .1)
-  prob <- predict(density_estimate, x = y_values)
-  prob_x <- predict(density_estimate, x = y)
+  prob <- stats::predict(density_estimate, x = y_values)
+  prob_x <- stats::predict(density_estimate, x = y)
 
   return(mean(prob <= prob_x))
 }
@@ -70,7 +70,7 @@ simulation_conformal_cde_score_mix_reg <- function(x,y, model_params,
                           proportions = model_params$prop)
 
   density_estimate <- ks::kde(y_values, h = .1)
-  prob_x <- predict(density_estimate, x = y)
+  prob_x <- stats::predict(density_estimate, x = y)
 
   return(prob_x)
 }
@@ -125,9 +125,9 @@ simulation_conformal_scores_mix_reg <- function(x,y, model_params, sim_num = 100
                           proportions = model_params$prop)
 
   density_estimate <- ks::kde(y_values, h = h)
-  prob <- predict(density_estimate, x = y_values)
-  prob_x <- predict(density_estimate, x = y)
-  prob_xx <- predict(density_estimate, x = grid)
+  prob <- stats::predict(density_estimate, x = y_values)
+  prob_x <- stats::predict(density_estimate, x = y)
+  prob_xx <- stats::predict(density_estimate, x = grid)
 
   # delta_xx creation
   delta_xx <- unique(diff(grid))

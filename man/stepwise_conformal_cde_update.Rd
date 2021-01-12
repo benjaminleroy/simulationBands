@@ -11,7 +11,8 @@ stepwise_conformal_cde_update(
   alpha = 0,
   monotonically_increasing = F,
   delta = 1e-12,
-  scaling_constraint = F
+  scaling_constraint = F,
+  prime = FALSE
 )
 }
 \arguments{
@@ -32,9 +33,11 @@ between each conformal based level grouping}
 \item{scaling_constraint}{boolean if we add a constraint to make sure that
 the final density has mass 1 (currently set at \code{FALSE} - but not for
 a good reason).}
+
+\item{prime}{boolean if we should return S' and b'}
 }
 \value{
-
+solution of above equation
 }
 \description{
 Solving for the x in the following general equation

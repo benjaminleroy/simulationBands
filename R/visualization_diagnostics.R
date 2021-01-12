@@ -6,17 +6,16 @@
 #' @param cumulative_comparisons_df cumlative information for level sets
 #' @param scale boolean if we should normalize the solution
 #'
-#' @return
-#' @export
+#' @return visualization plot
 vis_all_densities <- function(stepwise_scaling, individual_df_rich,
                               cumulative_comparisons_df,
                               scale = T){
   cumulative_comparisons_df$multiplier <- stepwise_scaling
 
   all_df2 <- individual_df_rich %>%
-    left_join(cumulative_comparisons_df,
+    dplyr::left_join(cumulative_comparisons_df,
               by = c("g_id", "g_id2")) %>%
-    mutate(conformal_pdf_density = fit_density * multiplier)
+    dplyr::mutate(conformal_pdf_density = .data$fit_density * .data$multiplier)
 
   if (scale){
     # delta_y
@@ -31,33 +30,45 @@ vis_all_densities <- function(stepwise_scaling, individual_df_rich,
 
     total <- sum(all_df2$conformal_pdf_density)*delta_y
     all_df2 <- all_df2 %>%
-      mutate(conformal_pdf_density = conformal_pdf_density / total)
+      dplyr::mutate(conformal_pdf_density = .data$conformal_pdf_density / total)
   }
 
   scaled_string <- c(""," (update correctly scaled)")[scale + 1]
 
   all_df2_long <- all_df2 %>%
-    dplyr::select(yy, true_density, fit_density, conformal_pdf_density) %>%
-    rename(conformal_density = "conformal_pdf_density",
+    dplyr::select(.data$yy,
+                  .data$true_density,
+                  .data$fit_density,
+                  .data$conformal_pdf_density) %>%
+    dplyr::rename(conformal_density = "conformal_pdf_density",
            fit_density = "fit_density") %>%
-    tidyr::pivot_longer(cols = c(true_density, fit_density,
-                                 conformal_density),
+    tidyr::pivot_longer(cols = c(.data$true_density,
+                                 .data$fit_density,
+                                 .data$conformal_density),
                         names_to = "name",
                         values_to = "value"
     ) %>%
-    mutate(name = stringr::str_replace(name, "_", " "))
+    dplyr::mutate(name = stringr::str_replace(.data$name, "_", " "))
 
-  vis2 <-  all_df2_long %>% ggplot() +
-    geom_line(aes(x = yy, y = value, color = name), size = 1) +
-    geom_point(aes(x = yy, y = value, color = name, size = name)) +
-    scale_size_manual(values = c("true density" = 0, "fit density" = 0,
-                                 "conformal density" = 2)) +
-    scale_color_manual(values = c("true density" = "black", "fit density" = "red",
-                                  "conformal density" = "purple")) +
-    labs(x = "range of y values",
-         y = paste0("probability distribution", scaled_string),
-         color = "density type",
-         size = "density type")
+  vis2 <-  all_df2_long %>% ggplot2::ggplot() +
+    ggplot2::geom_line(
+      ggplot2::aes(x = .data$yy,
+                   y = .data$value,
+                   color = .data$name), size = 1) +
+    ggplot2::geom_point(
+      ggplot2::aes(x = .data$yy,
+                   y = .data$value,
+                   color = .data$name,
+                   size = .data$name)) +
+    ggplot2::scale_size_manual
+  (values = c("true density" = 0, "fit density" = 0, "conformal density" = 2)) +
+    ggplot2::scale_color_manual(
+      values = c("true density" = "black", "fit density" = "red",
+                 "conformal density" = "purple")) +
+    ggplot2::labs(x = "range of y values",
+                  y = paste0("probability distribution", scaled_string),
+                  color = "density type",
+                  size = "density type")
 
   return(vis2)
 
@@ -75,10 +86,10 @@ vis_stepwise_scaling_only <- function(stepwise_scaling,
                                       x = 1:length(stepwise_scaling)){
   vis1 <- data.frame(multiplier = stepwise_scaling,
                      x = x) %>%
-    ggplot() +
-    geom_point(aes(x = x, y = multiplier)) +
-    geom_line(aes(x = x, y = multiplier)) +
-    labs(x = "threshold for cde",
+    ggplot2::ggplot() +
+    ggplot2::geom_point(ggplot2::aes(x = .data$x, y = .data$multiplier)) +
+    ggplot2::geom_line(ggplot2::aes(x = .data$x, y = .data$multiplier)) +
+    ggplot2::labs(x = "threshold for cde",
          y = "scaling")
   return(vis1)
 }

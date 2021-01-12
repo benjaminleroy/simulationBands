@@ -4,16 +4,18 @@
 \alias{create_S_b_matrix}
 \title{Create the "S" matrix and "b" vector}
 \usage{
-create_S_b_matrix(n, prob_cde)
+create_S_b_matrix(n, prob_cde, prime = FALSE)
 }
 \arguments{
 \item{n}{number of observations in the calibration set}
 
 \item{prob_cde}{\eqn{P(y: f(y|x) \in [lambda_{i}, lambda_{i+1})} vector. See
 details for more information.}
+
+\item{prime}{boolean if we should return S' and b'}
 }
 \value{
-
+list of S matrix and b vector.
 }
 \description{
 An internal function that create the "S" matrix and "b" vector for the

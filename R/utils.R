@@ -11,14 +11,16 @@ cut_to_numeric <- function(id, .lower = TRUE){
   if (.lower){
     initial_extract <- id %>%
       as.character() %>%
-      str_extract("(\\(-*[0-9]+\\.*[0-9]*(e-*[0-9]{2}){0,1}\\,)|(\\(-Inf\\,)")
+      stringr::str_extract(paste0("(\\(-*[0-9]+\\.*[0-9]*(e-*[0-9]{2}){0,1}\\,)|",
+                                  "(\\(-Inf\\,)"))
   } else {
     initial_extract <- id %>%
       as.character() %>%
-      str_extract("(\\,-*[0-9]+\\.*[0-9]*(e-*[0-9]{2}){0,1}\\])|(\\,Inf])")
+      stringr::str_extract(paste0("(\\,-*[0-9]+\\.*[0-9]*(e-*[0-9]{2}){0,1}\\])|",
+                                  "(\\,Inf])"))
   }
   out_numeric <- initial_extract %>%
-    str_extract("(-*[0-9]+\\.*[0-9]*(e-*[0-9]{2}){0,1})|(-Inf)") %>%
+    stringr::str_extract("(-*[0-9]+\\.*[0-9]*(e-*[0-9]{2}){0,1})|(-Inf)") %>%
     as.numeric()
 
   return(out_numeric)
