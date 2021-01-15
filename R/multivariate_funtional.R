@@ -1,3 +1,5 @@
+
+
 #' calculate maxmin distance between points
 #'
 #' Can be though of as a LOOCV containment of all points (what is the minimum
@@ -22,6 +24,92 @@ get_delta <- function(dist_mat){
 #' @rdname get_delta
 get_delta_simple <- get_delta
 
+
+
+#' Identify the index in a raveled \code{dist} (upper triangle of distance)
+#' relative to row / column ordering
+#'
+#' A extended idea as proposed on
+#' \href{stack overflow}{https://stackoverflow.com/a/12643509} by Christian A.
+#'
+#' Note that i and j can be vectors, but if they're both vectors we
+#' don't return all combinations of each.
+#'
+#' @param i row index (either a single value or vector). \code{i} < \code{j}.
+#' @param j column index (either a single value or vector)
+#' @param n number of objects that created the \code{dist} object
+#' @param .check_order boolean (if we should check that \code{i} < \code{j})
+#' and remove all values that don't follow that rule from returning.
+#' @param .check_possible_ij boolean (if we should check that \code{i} and
+#' \code{j} are not greater than \code{n}), and remove all values that don't
+#' follow that rule from returning.
+#'
+#' @return requested indicies.
+distdex <- function(i,j,n, .check_order = T,
+                    .check_possible_ij = T) {
+  values <- n*(i-1) - i*(i-1)/2 + j-i
+
+
+  correct_values <- T
+
+  if (.check_possible_ij){
+    correct_values <- j <= n & i <= n
+  }
+
+  if (.check_order){
+    correct_order <- i < j
+    correct_values <- correct_values & correct_order
+  }
+
+  return(values[correct_values])
+}
+
+
+#' Named after assuming positive integers, but not checked
+#'
+#' @param x vector of numerical values (or single value)
+#'
+#' @return subset of \code{x} that greater than 0.
+pos_int <- function(x){
+  return(x[x > 0])
+}
+
+
+#' calculate maxmin distance between points (\code{dist} based)
+#'
+#' Can be though of as a LOOCV containment of all points (what is the minimum
+#' radius to do so).
+#'
+#' @param x \code{dist} based object
+#' @param verbose boolean, if should present a progress bar
+#'
+#' @return minimum radius for all points to be covered
+#' @export
+get_delta_dist <- function(x, verbose = F){
+  assertthat::assert_that(inherits(x, "dist"),
+                          msg = "dist should be of class dist")
+
+
+  n <- .5 + .5 * sqrt(1 + 8*length(x))
+
+  if(verbose){
+    pb <- progress::progress_bar$new(
+      format = "processing row minimums [:bar] :percent eta: :eta",
+      total = n, clear = FALSE, width = 70)
+
+  }
+  vals <- rep(NA, n)
+  for (i in 1:n){
+    right_side_id <- distdex(i, pos_int((i+1):n), n)
+    left_side_id <- distdex(pos_int(1:(i-1)), i, n)
+    vals[i] <- min(x[c(right_side_id, left_side_id)])
+    if (verbose) {
+      pb$tick()
+    }
+
+  }
+  return(max(vals))
+}
 
 #' minimum distance to contain all points of first set with union of balls of
 #' second set

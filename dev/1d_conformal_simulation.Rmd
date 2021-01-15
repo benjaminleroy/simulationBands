@@ -20,7 +20,7 @@ n_sims_containment <- 300
 verbose <- T
 save_fig <- T
 
-rerun <- T # to rerun all analysis even if already saved...
+rerun <- F # to rerun all analysis even if already saved...
 ```
 
 
@@ -445,10 +445,24 @@ gridExtra::grid.arrange(vis1, vis2,
                         vis5,
                         nrow = 3)
 
+
 if (save_fig){
-  ggvis <- gridExtra::arrangeGrob(vis1, vis2, nrow = 2)
+  ggvis <- gridExtra::arrangeGrob(vis1 + theme_minimal() +
+                                    labs(title = "Distribution of \nsimulation conformal score",
+                                         x = "simulation-based conformal score (\"radius\")",
+                                         y = "# of calibration set"), 
+                                  vis2 + theme_minimal() +
+                                    labs(x = "simulation-based conformal score (\"radius\")",
+                                         title = "Cumulative distribution of \nsimulation conformal score"), 
+                                  layout_matrix = matrix(c(1,1,1,1,2,2,
+                                                           1,1,1,1,2,2,
+                                                           1,1,1,1,2,2),
+                                                         nrow = 3, byrow = T))
   
-  ggplot2::ggsave(plot = ggvis, filename = sprintf("quick_images/simulation_bands_1d_delta_size_%s.png",
+  ggplot2::ggsave(plot = ggvis, 
+                  width = 12,
+                  height = 5, 
+                  filename = sprintf("quick_images/simulation_bands_1d_delta_size_%s.png",
                                                    delta_prop_image_string))
   }
 ```

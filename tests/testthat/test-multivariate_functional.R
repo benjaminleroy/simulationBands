@@ -36,6 +36,44 @@ testthat::test_that("test get_delta_simple function, basic", {
 
 })
 
+testthat::test_that("test get_delta_dist, basic", {
+  test <- rnorm(5)
+  d <- dist(test)
+  dmat <- as.matrix(d)
+  delta <- get_delta_simple(dmat)
+  delta2 <- get_delta_dist(d)
+  testthat::expect_equal(delta, delta2)
+
+  d <- data.frame(x = 1:5)
+  d <- dist(d)
+  testthat::expect_equal(get_delta_dist(d),1)
+
+  d2 <- data.frame(x = c(1,3:5))
+  d <- dist(d2)
+  testthat::expect_equal(get_delta_dist(d),2)
+
+
+})
+
+testthat::test_that("test distdex, basic",{
+  test <- rnorm(5)
+  d <- dist(test)
+  dmat <- as.matrix(d)
+  for (i in 1:4){
+    for (j in (i+1):5){
+      id <- distdex(i, j, n = 5)
+      testthat::expect_equal(dmat[i,j], d[id])
+    }
+  }
+
+  # "errors"
+  testthat::expect_equal(distdex(i = 5, j = 4, n = 10),
+                         numeric(0))
+  testthat::expect_equal(distdex(i = 2, j = 4, n = 3),
+                         numeric(0))
+
+})
+
 
 testthat::test_that("test maxmin_inner_old, basic", {
   df_row_e <- data.frame(x = 1:5, y = 1:5)
