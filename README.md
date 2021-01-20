@@ -9,7 +9,8 @@
 [![codecov](https://codecov.io/gh/benjaminleroy/simulationBands/branch/main/graph/badge.svg)](https://codecov.io/gh/benjaminleroy/simulationBands)
 <!-- badges: end -->
 
-The goal of simulationBands is to …
+The goal of `simulationBands` is to provide a set of tools to implement
+simulation-based conformal inference for different applications.
 
 ## Installation
 
