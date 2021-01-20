@@ -31,5 +31,8 @@ Imports:
     testthat,
     tidyr,
     tidyselect,
-    magrittr
+    magrittr,
+    Rcpp
 VignetteBuilder: knitr
+LinkingTo: 
+    Rcpp

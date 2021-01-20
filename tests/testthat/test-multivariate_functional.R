@@ -55,6 +55,31 @@ testthat::test_that("test get_delta_dist, basic", {
 
 })
 
+testthat::test_that("test get_delta_large, basic", {
+  test <- data.frame(x = rnorm(55))
+  val <- get_delta_large(test, verbose = F)
+  val2 <- get_delta_simple(as.matrix(dist(test)))
+
+  testthat::expect_equal(val, val2)
+
+  test <- data.frame(x = rnorm(55),
+                     y = rnorm(55))
+  val <- get_delta_large(test, verbose = F)
+  val2 <- get_delta_simple(as.matrix(dist(test)))
+  testthat::expect_equal(val, val2)
+})
+
+testthat::test_that("test get_delta_flex, basic", {
+  d <- data.frame(x = 1:5)
+  testthat::expect_equal(get_delta_flex(d),1)
+
+  d2 <- data.frame(x = c(1,3:5))
+  testthat::expect_equal(get_delta_flex(d2),2)
+
+})
+
+get_delta_flex
+
 testthat::test_that("test distdex, basic",{
   test <- rnorm(5)
   d <- dist(test)

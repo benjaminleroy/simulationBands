@@ -1,5 +1,3 @@
-
-
 #' calculate maxmin distance between points
 #'
 #' Can be though of as a LOOCV containment of all points (what is the minimum
@@ -110,6 +108,178 @@ get_delta_dist <- function(x, verbose = F){
   }
   return(max(vals))
 }
+
+
+#' euclidean distance between 2 sets
+#'
+#' @param x data.frame (n x p)
+#' @param y data.frame (m x p)
+#'
+#' @return distance between x points (rows) and y points (columns) - (n x m)
+distEuclidean <- function(x, y){
+  centers <- as.matrix(y)
+  z <- matrix(0, nrow=nrow(x), ncol=nrow(centers))
+  for(k in 1:nrow(centers)){
+    z[,k] <- sqrt( colSums((t(x) - centers[k,])^2) )
+  }
+  z
+}
+
+# Rcpp::cppFunction('
+# NumericMatrix crossdist(NumericMatrix m1, NumericMatrix m2) {
+#   /**
+#    * calculates distances between points of 2 matrices
+#    *
+#    * taken from
+#    * https://www.r-bloggers.com/2019/09/matrix-cross-distances-using-rcpp/
+#    *
+#    * @param m1 first matrix (n x p)
+#    * @param m2 second matrix (m x p)
+#    */
+#   int nrow1 = m1.nrow();
+#   int nrow2 = m2.nrow();
+#   int ncol = m1.ncol();
+#
+#   if (ncol != m2.ncol()) {
+#     throw std::runtime_error("Incompatible number of dimensions");
+#   }
+#
+#   NumericMatrix out(nrow1, nrow2);
+#
+#   for (int r1 = 0; r1 < nrow1; r1++) {
+#     for (int r2 = 0; r2 < nrow2; r2++) {
+#       double total = 0;
+#       for (int c12 = 0; c12 < ncol; c12++) {
+#         total += pow(m1(r1, c12) - m2(r2, c12), 2);
+#       }
+#       out(r1, r2) = sqrt(total);
+#     }
+#   }
+#
+#   return out;
+# }')
+
+#' euclidean distance between 2 sets
+#'
+#' @param df1 data.frame (n x p)
+#' @param df2 data.frame (m x p)
+#'
+#' @return distance between x points (rows) and y points (columns) - (n x m)
+crossdist_df <- function(df1, df2){
+  crossdist(as.matrix(df1), as.matrix(df2))
+}
+
+
+
+#' calculate maxmin distance between points (breaks into parts)
+#'
+#' Can be though of as a LOOCV containment of all points (what is the minimum
+#' radius to do so).
+#'
+#' @param df data.frame
+#' @param full_breaks number of breaks (1 more if not perfectly split)
+
+#' @param verbose boolean, if should present a progress bar
+#'
+#' @return minimum radius for all points to be covered
+#' @export
+get_delta_large <- function(df, full_breaks = 10, verbose = F){
+  # index breaks
+  n <- nrow(df)
+  mod_diff <- n %% full_breaks
+  length_block <- floor(n/full_breaks)
+
+  idx_sets <- lapply(1:full_breaks,
+                     function(id) {seq((id-1)*length_block + 1,
+                                      id*length_block)})
+  if (mod_diff  > 0){
+    idx_sets[[full_breaks+1]] <- seq(full_breaks*length_block + 1, n)
+  }
+
+  if(verbose){
+    pb <- progress::progress_bar$new(
+      format = "processing blocks [:bar] :percent eta: :eta",
+      total = .5 * length(idx_sets)*(length(idx_sets)-1) + length(idx_sets),
+      clear = FALSE, width = 70)
+  }
+
+  min_vec <- rep(Inf, n)
+  for (b_idx in 1:length(idx_sets)){
+    for (bb_idx in b_idx:length(idx_sets)){
+      if (b_idx == bb_idx){
+        #dmat <- as.matrix(dist(df[idx_sets[[b_idx]],]))
+        if (ncol(df) == 1){
+          dmat <- crossdist_df(df[idx_sets[[b_idx]],, drop = F],
+                               df[idx_sets[[b_idx]],, drop = F])
+        } else {
+          dmat <- crossdist_df(df[idx_sets[[b_idx]],],
+                               df[idx_sets[[b_idx]],])
+        }
+        diag(dmat) <- Inf
+        min_vec_inner <- apply(dmat, 1, min)
+
+        min_vec[idx_sets[[b_idx]]] <- cbind(
+          min_vec[idx_sets[[b_idx]]],
+          min_vec_inner) %>% apply(1, min)
+
+      } else {
+        if (ncol(df) == 1){
+          dmat <- crossdist_df(df[idx_sets[[b_idx]],, drop = F],
+                                df[idx_sets[[bb_idx]],, drop = F])
+        } else {
+          dmat <- crossdist_df(df[idx_sets[[b_idx]],],
+                                df[idx_sets[[bb_idx]],])
+        }
+        row_vec <- apply(dmat, 1, min)
+        col_vec <- apply(dmat, 2, min)
+
+        min_vec[idx_sets[[b_idx]]] <- cbind(
+          min_vec[idx_sets[[b_idx]]],
+          row_vec) %>% apply(1, min)
+
+        min_vec[idx_sets[[bb_idx]]] <- cbind(
+          min_vec[idx_sets[[bb_idx]]],
+          col_vec) %>% apply(1, min)
+
+      }
+      if (verbose) {
+        pb$tick()
+      }
+    }
+
+  }
+  return(max(min_vec))
+}
+
+
+#' calculate maxmin distance between points
+#'
+#' A wrapper of \code{get_delta_simple}, \code{get_delta_dist}, and
+#' \code{get_delta_large} relative to the number of observations to be used.
+#' Attempts to balance the number of observations vs the fastest approach (
+#' attempting to balance time costs from memory storage and processing speed).
+#'
+#'
+#' @param df data.frame (with only columns that are needed)
+#' @param full_breaks number of breaks relative to \code{get_delta_large},
+#' otherwise it's not used.
+#' @param verbose boolean, a progressbar is provided  to track the progress of
+#' \code{get_delta_dist} or \code{get_delta_large}, if they are used.
+#'
+#' @return minimum radius for all points to be covered
+#' @export
+get_delta_flex <- function(df, full_breaks = 10, verbose = F){
+  n <- nrow(df)
+  if (n < 500){
+    return(get_delta_simple(as.matrix(stats::dist(df))))
+  } else if (n < 5000) {
+    return(get_delta_dist(stats::dist(df), verbose = verbose))
+  } else {
+    return(get_delta_large(df, full_breaks = full_breaks,
+                           verbose = verbose))
+  }
+}
+
 
 #' minimum distance to contain all points of first set with union of balls of
 #' second set
