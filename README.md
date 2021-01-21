@@ -6,7 +6,7 @@
 <!-- badges: start -->
 
 [![R-CMD-check](https://github.com/benjaminleroy/simulationBands/workflows/R-CMD-check/badge.svg)](https://github.com/benjaminleroy/simulationBands/actions)
-[![codecov](https://codecov.io/gh/benjaminleroy/simulationBands/branch/main/graph/badge.svg)](https://codecov.io/gh/benjaminleroy/simulationBands)
+[![codecov](https://codecov.io/gh/benjaminleroy/simulationBands/branch/main/graph/badge.svg?token=46PIZLTMGU)](https://codecov.io/gh/benjaminleroy/simulationBands)
 <!-- badges: end -->
 
 The goal of `simulationBands` is to provide a set of tools to implement
