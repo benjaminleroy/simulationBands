@@ -10,7 +10,7 @@
 <!-- badges: end -->
 
 The goal of `simulationBands` is to provide a set of tools to implement
-simulation-based conformal inference for different applications.
+simulation-based conformal inference across many different applications.
 
 ## Installation
 
