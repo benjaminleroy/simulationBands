@@ -78,7 +78,26 @@ testthat::test_that("test get_delta_flex, basic", {
 
 })
 
-get_delta_flex
+testthat::test_that("test get_delta_nn", {
+  df_big <- data.frame(x = rnorm(5000),
+                       y = rnorm(5000))
+  mm_delta_nn <- get_delta_nn(df_big)
+  mm_delta_split <- get_delta_large(df_big)
+  mm_delta_dist <- get_delta_simple(as.matrix(dist(df_big)))
+  mm_delta_simple <- get_delta_dist(dist(df_big))
+
+  testthat::expect_equal(mm_delta_nn, mm_delta_simple)
+  testthat::expect_equal(mm_delta_nn, mm_delta_dist)
+  testthat::expect_equal(mm_delta_nn, mm_delta_split)
+
+  d <- data.frame(x = 1:5)
+  testthat::expect_equal(get_delta_nn(d),1)
+
+  d2 <- data.frame(x = c(1,3:5))
+  testthat::expect_equal(get_delta_nn(d2),2)
+})
+
+
 
 testthat::test_that("test distdex, basic",{
   test <- rnorm(5)

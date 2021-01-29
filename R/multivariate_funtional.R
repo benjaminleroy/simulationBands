@@ -125,39 +125,6 @@ distEuclidean <- function(x, y){
   z
 }
 
-# Rcpp::cppFunction('
-# NumericMatrix crossdist(NumericMatrix m1, NumericMatrix m2) {
-#   /**
-#    * calculates distances between points of 2 matrices
-#    *
-#    * taken from
-#    * https://www.r-bloggers.com/2019/09/matrix-cross-distances-using-rcpp/
-#    *
-#    * @param m1 first matrix (n x p)
-#    * @param m2 second matrix (m x p)
-#    */
-#   int nrow1 = m1.nrow();
-#   int nrow2 = m2.nrow();
-#   int ncol = m1.ncol();
-#
-#   if (ncol != m2.ncol()) {
-#     throw std::runtime_error("Incompatible number of dimensions");
-#   }
-#
-#   NumericMatrix out(nrow1, nrow2);
-#
-#   for (int r1 = 0; r1 < nrow1; r1++) {
-#     for (int r2 = 0; r2 < nrow2; r2++) {
-#       double total = 0;
-#       for (int c12 = 0; c12 < ncol; c12++) {
-#         total += pow(m1(r1, c12) - m2(r2, c12), 2);
-#       }
-#       out(r1, r2) = sqrt(total);
-#     }
-#   }
-#
-#   return out;
-# }')
 
 #' euclidean distance between 2 sets
 #'
@@ -278,6 +245,21 @@ get_delta_flex <- function(df, full_breaks = 10, verbose = F){
     return(get_delta_large(df, full_breaks = full_breaks,
                            verbose = verbose))
   }
+}
+
+#' calculate maxmin distance between points
+#'
+#' Fast calculation of maxmin distance using kd trees and nearest neighbors from
+#' the \code{RANN} package.
+#'
+#' @param df data.frame (with only columns that are needed)
+#'
+#' @return minimum radius for all points to be covered
+#' @export
+get_delta_nn <- function(df){
+  check <- RANN::nn2(df, df, k = 2, treetype = "kd", eps = 0)
+  mm_delta <- check$nn.dists[,2] %>% max()
+  return(mm_delta)
 }
 
 
