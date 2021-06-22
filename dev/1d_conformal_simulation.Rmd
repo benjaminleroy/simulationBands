@@ -8,9 +8,9 @@ We DON'T expect one to run this document.
 ```{r echo = F}
 # document hyper parameters
 
-confidence_level <- .9
-confidence_level_string <- "90%"
-confidence_level_image_string <- "90percent"
+confidence_level <- .6
+confidence_level_string <- "60%"
+confidence_level_image_string <- "60percent"
 n_simulations <- 1000
 delta_prop <- .8
 delta_prop_string <- "80%"
@@ -19,8 +19,9 @@ delta_prop_image_string <- "80percent"
 n_sims_containment <- 300
 verbose <- T
 save_fig <- T
+save_image <- save_fig
 
-rerun <- F # to rerun all analysis even if already saved...
+rerun <- T # to rerun all analysis even if already saved...
 ```
 
 
@@ -37,7 +38,7 @@ where
 3. $\sigma(x) = 1/4 + |x|$.
 
 
-```{r}
+```{r message = F, warning = F}
 library(tidyverse)
 library(devtools)
 library(ggrepel)
@@ -61,11 +62,21 @@ test_set$y <- sapply(test_set$x, function(x) {simulationBands::lei_wasserman_dat
 
 test_set_discrete <- tibble(x = seq(-1.5,1.5, by = .01))
 test_set_discrete$y <- sapply(test_set_discrete$x, function(x) {simulationBands::lei_wasserman_data_conditional_simulate(x, n = 1)[[1]]$sim})
+
+```
+```{r vis_data, eval = F}
+vis_raw <- ggplot(test_set) +
+  geom_point(aes(x = x, y = y)) +
+  theme_minimal()
+vis_raw
+if (save_fig){
+ggplot2::ggsave(vis_raw, filename = "quick_images/simulation_distribution_1d.png")
+}
 ```
 
 
 ```{r functions}
-get_delta <- function(dist_mat){
+get_delta_this <- function(dist_mat){
   # similar to EpiCompare function
   diag(dist_mat) <- max(dist_mat)
   mm_delta <- apply(dist_mat, MARGIN = 1, min) %>% max
@@ -230,8 +241,7 @@ simulation_based_conformal_1d <- function(truth_df, simulations_grouped_df,
     select(one_of(data_column_names))
   
   
-  mm_delta <- get_delta(as.matrix(dist(top_points)))
-  
+  mm_delta <- get_delta_this(as.matrix(dist(top_points)))
   containment_df <- pseudo_density_df %>% 
     left_join(mm_df, by = group_names) %>%
     mutate(delta_close = maxmin_dist < mm_delta)
@@ -305,7 +315,7 @@ simulation_based_conformal_1d_region <- function(simulations_grouped_df,
     ungroup() %>% filter(keep) %>%
     select(one_of(data_column_names))
   
-  mm_delta <- get_delta(as.matrix(dist(top_points)))
+  mm_delta <- get_delta_this(as.matrix(dist(top_points)))
   
   conformal_band_points <- simulations_group_df_inner %>% 
     left_join(pseudo_density_df, by = group_names) %>% 
@@ -613,9 +623,9 @@ delta_y = .001
 yy <- seq(-8, 8, by = delta_y)
 
 containment_vec <- function(points, yy, radius){
-  # if (nrow(points) == 0){
-  #   return(rep(FALSE, length(yy)))
-  # }
+  if (nrow(points) == 0){
+    return(rep(FALSE, length(yy)))
+  }
   nn2_vals <- RANN::nn2(data = as.matrix(points), 
                         query = as.matrix(yy),
                         k = 1, 
@@ -948,6 +958,9 @@ if (save_image){
 
 ## Izbicki 2020
 
+
+### calibration 
+
 ```{r}
 delta_y = .001
 yy <- seq(-8, 8, by = delta_y)
@@ -1028,22 +1041,24 @@ for (calibration_idx in 1:n_calibrate){
   }
 }
 
-kmeans_result <- try(LICORS::kmeanspp(g_train_cde,k=k),
+kmeans_result <- try(LICORS::kmeanspp(g_calibrate_cde,k=k),
                      silent = TRUE)
-if(class(kmeans_result)=="try-error")
-{
-  kmeans_result <- kmeans(g_train_cde,centers = k)
+if(class(kmeans_result)=="try-error"){
+  kmeans_result <- kmeans(g_calibrate_cde,centers = k)
 }
 centers_kmeans <- kmeans_result$centers
 
-which_partition_calibration <- predictionBands:::which_neighbors(centers_kmeans,
-                                         g_calibrate_cde,1)
+library(FNN)
+which_partition_calibration <- RANN::nn2(data = centers_kmeans, g_calibrate_cde, k = 1)$nn.idx
+                               #predictionBands:::which_neighbors(centers_kmeans,
+                                                                #g_calibrate_cde,1)
 
 calibration_info$partition_id <- which_partition_calibration
 
 rm(g_calibrate_cde)
 ```
 
+### test 
 
 ```{r}
 n_test <- length(unique(df_grid_all_g_cd$calibration_idx))
@@ -1067,8 +1082,9 @@ for (calibration_idx in 1:n_test){
   }
 }
 
-which_partition_test <- predictionBands:::which_neighbors(centers_kmeans,
-                                         g_test_cde,1)
+which_partition_test <- RANN::nn2(data = centers_kmeans, g_test_cde, k = 1)$nn.idx
+#predictionBands:::which_neighbors(centers_kmeans,
+#                                         g_test_cde,1)
 
 
 ```
@@ -1222,4 +1238,96 @@ if (save_image){
 }
 ```
 
+## presentation size
 
+```{r fig.width = 17, fig.height = 8}
+# TODO: update confidence
+gridExtra::grid.arrange(grobs = list(
+              vis1g, vis1lw, vis1iz, vis1,
+              vis2g, vis2lw, vis2iz, vis2) %>% 
+               lapply(function(g){g + theme(text = element_text(size = 15),
+                                            plot.title = element_text(size = 22))}),
+             layout_matrix = matrix(c(1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      5,5,5,5,6,6,6,6,7,7,7,7,8,8,8,8,
+                                      5,5,5,5,6,6,6,6,7,7,7,7,8,8,8,8),
+                                    ncol = 4*4, byrow = T), 
+             bottom = paste("*a \"global\" version of",
+                            "Izbicki et. al 2020's CD approach."))
+
+if (save_image){
+  ggvis <- gridExtra::arrangeGrob(grobs = list(
+              vis1g, vis1lw, vis1iz, vis1,
+              vis2g, vis2lw, vis2iz, vis2) %>% 
+               lapply(function(g){g + theme(text = element_text(size = 12),
+                                            plot.title = element_text(size = 24))}),
+             layout_matrix = matrix(c(1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      5,5,5,5,6,6,6,6,7,7,7,7,8,8,8,8,
+                                      5,5,5,5,6,6,6,6,7,7,7,7,8,8,8,8),
+                                    ncol = 4*4, byrow = T),
+             bottom = paste("*a \"global\" version of",
+                            "Izbicki et. al 2020's CD approach."))
+  ggplot2::ggsave(plot = ggvis, width = 17, height = 8,
+                  filename = sprintf(paste0("quick_images/sim_bands_conf",
+                                   "_test_discrete_1d_options_%s",
+                                   "_sims_delta_size_%s_confidence_level_%s_PRESENT.png"),
+                            n_simulations, delta_prop_image_string, 
+                            confidence_level_image_string))
+}
+```
+
+## UAI size
+
+```{r fig.width = 17, fig.height = 8}
+# TODO: update confidence
+gridExtra::grid.arrange(grobs = list(
+              vis1g, vis1lw, vis1iz, vis1,
+              vis2g, vis2lw, vis2iz, vis2) %>% 
+               lapply(function(g){g + theme(text = element_text(size = 15),
+                                            plot.title = element_text(size = 22))}),
+             layout_matrix = matrix(c(1,1,1,1,2,2,2,2,
+                                      1,1,1,1,2,2,2,2,
+                                      1,1,1,1,2,2,2,2,
+                                      1,1,1,1,2,2,2,2,
+                                      5,5,5,5,6,6,6,6,
+                                      5,5,5,5,6,6,6,6,
+                                      rep(NA,8),
+                                      3,3,3,3,4,4,4,4,
+                                      3,3,3,3,4,4,4,4,
+                                      3,3,3,3,4,4,4,4,
+                                      3,3,3,3,4,4,4,4,
+                                      7,7,7,7,8,8,8,8,
+                                      7,7,7,7,8,8,8,8),
+                                    ncol = 4*2, byrow = T), 
+             bottom = grid::textGrob(paste("*a \"global\" version of",
+                            "Izbicki et. al 2020's CD approach."),
+                            gp=gpar(fontsize=22)))
+
+if (save_image){
+  ggvis <- gridExtra::arrangeGrob(grobs = list(
+              vis1g, vis1lw, vis1iz, vis1,
+              vis2g, vis2lw, vis2iz, vis2) %>% 
+               lapply(function(g){g + theme(text = element_text(size = 6),
+                                            plot.title = element_text(size = 12))}),
+             layout_matrix = matrix(c(1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,
+                                      5,5,5,5,6,6,6,6,7,7,7,7,8,8,8,8,
+                                      5,5,5,5,6,6,6,6,7,7,7,7,8,8,8,8),
+                                    ncol = 4*4, byrow = T),
+             bottom = paste("*a \"global\" version of",
+                            "Izbicki et. al 2020's CD approach."))
+  ggplot2::ggsave(plot = ggvis, width = 17, height = 8,
+                  filename = sprintf(paste0("quick_images/sim_bands_conf",
+                                   "_test_discrete_1d_options_%s",
+                                   "_sims_delta_size_%s_confidence_level_%s_UAI.png"),
+                            n_simulations, delta_prop_image_string, 
+                            confidence_level_image_string))
+}
+```
