@@ -36,6 +36,7 @@ visualization purposes and visual checks only)}
 list of :
 \itemize{
 \item matrix of \code{G_mat} points walked up all the way
+\item \code{t}, the actual number of steps taken
 \item if \code{list_out} is \code{TRUE} then list of matrices for each step,
 else \code{NULL}
 }

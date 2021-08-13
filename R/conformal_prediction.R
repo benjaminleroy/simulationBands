@@ -17,6 +17,7 @@
 #'
 #' @return list of :
 #'  - matrix of \code{G_mat} points walked up all the way
+#'  - \code{t}, the actual number of steps taken
 #'  - if \code{list_out} is \code{TRUE} then list of matrices for each step,
 #'  else \code{NULL}
 #' @export
@@ -88,7 +89,7 @@ psuedo_density_mode_cluster_1d <- function(X_mat, G_mat = X_mat,
     G_mat_list <- list()
   }
 
-  return(list(G_mat_out, G_mat_list))
+  return(list(G_mat = G_mat_out, t = t, G_mat_list = G_mat_list))
 }
 
 
