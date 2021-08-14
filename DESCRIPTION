@@ -18,6 +18,7 @@ Suggests:
 Imports:
     assertthat,
     dplyr,
+    EpiCompare,
     ggplot2,
     ks,
     pracma,

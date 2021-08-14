@@ -122,7 +122,7 @@ mode_clustering_1d <- function(df_info, position, naming_info = NULL, sigma, max
                                         maxT = maxT, eps = eps,
                                         verbose = verbose, list_out = FALSE)
 
-  dist_mat <- as.matrix(dist(out[[1]]))
+  dist_mat <- as.matrix(stats::dist(out[[1]]))
 
   adjmatrix <- dist_mat <= diff_eps
   ig <- igraph::graph_from_adjacency_matrix(adjmatrix, mode = "undirected")
@@ -160,7 +160,7 @@ coverage_down_1d_single <- function(ordered_sim_df, e_cols,
                                     verbose = FALSE){
   n_obs <- nrow(ordered_sim_df)
 
-  point_dist_mat <- as.matrix(dist(ordered_sim_df[,e_cols]))
+  point_dist_mat <- as.matrix(stats::dist(ordered_sim_df[,e_cols]))
 
   dist_mat <- matrix(NA, nrow = n_obs, ncol = n_obs)
   dist_mat[1,1] <- 0
@@ -410,11 +410,11 @@ inner_containment_conformal_score_mode_radius_1d <- function(df_row_group,
 
     # calculate score per mode relative to overall ranking of points
     all_info_df <- group_info_df %>%
-      mutate(containment_val = coverage_number)
+      dplyr::mutate(containment_val = coverage_number)
 
 
     simulation_info_inner <- rbind((simulation_info_df[inner_ids,] %>%
-                                      filter(groupings == g_idx) %>%
+                                      dplyr::filter(.data$groupings == g_idx) %>%
                                       dplyr::ungroup() %>%
                                       dplyr::select(.data$ranking, .data$group_ranking)),
                                    data.frame(ranking = n_draws+1, group_ranking = n_draws+1))
@@ -472,12 +472,12 @@ simulation_based_conformal_1d_complex <- function(truth_df, simulations_df,
                                                   verbose = FALSE){
 
   # calculating sigma value ------
-  dist_mat <- simulations_df %>% select(one_of(data_column_names)) %>%
-    dist() %>% as.matrix()
+  dist_mat <- simulations_df %>% dplyr::select(tidyselect::one_of(data_column_names)) %>%
+    stats::dist() %>% as.matrix()
 
   group_names <- names(simulations_df)[!(names(simulations_df) %in% data_column_names)]
   if (length(group_names) == 0){
-    simulations_df <- simulations_df %>% rownames_to_column(var = "row_index")
+    simulations_df <- simulations_df %>% tibble::rownames_to_column(var = "row_index")
     group_names <- names(simulations_df)[!(names(simulations_df) %in% data_column_names)]
   }
 
@@ -505,10 +505,10 @@ simulation_based_conformal_1d_complex <- function(truth_df, simulations_df,
                                       "function's sigma selection."))
 
   top_points <- simulations_df %>%
-    left_join(pseudo_density_df, by = group_names) %>%
-    mutate(keep = ranking > ceiling(.2*nrow(simulations_df))) %>%
-    ungroup() %>% filter(keep) %>%
-    select(one_of(data_column_names))
+    dplyr::left_join(pseudo_density_df, by = group_names) %>%
+    dplyr::mutate(keep = .data$ranking > ceiling(.2*nrow(simulations_df))) %>%
+    dplyr::ungroup() %>% dplyr::filter(.data$keep) %>%
+    dplyr::select(tidyselect::one_of(data_column_names))
 
 
   mm_delta <- EpiCompare::get_delta_nn(top_points)
@@ -518,7 +518,7 @@ simulation_based_conformal_1d_complex <- function(truth_df, simulations_df,
   out_groups <- mode_clustering_1d(df_info = simulations_df,
                                    position = c(1:ncol(simulations_df))[names(simulations_df) %in% data_column_names],
                                    naming_info = c(1:ncol(simulations_df))[names(simulations_df) %in% group_names],
-                                   sigma, maxT = .maxT,
+                                   sigma = sigma_val, maxT = .maxT,
                                    eps = .eps,
                                    diff_eps = .diff_eps,
                                    verbose = verbose)
@@ -529,7 +529,7 @@ simulation_based_conformal_1d_complex <- function(truth_df, simulations_df,
   ordering_list <- simulation_info_out[[2]]
 
   ## fixed
-  tm_radius_fixed <- inner_convert_single_radius_to_structure(mm_delta,
+  tm_radius_fixed <- EpiCompare:::inner_convert_single_radius_to_structure(mm_delta,
                                                               ordering_list)
 
   ## vary
@@ -539,11 +539,11 @@ simulation_based_conformal_1d_complex <- function(truth_df, simulations_df,
                                           verbose = FALSE)
   # no mode clustering ---------
   out_groups_nm <- out_groups %>% dplyr::mutate(groupings = 1)
-  simulation_info_out_nm <- inner_expanding_info(pseudo_density_df, out_groups_nm)
+  simulation_info_out_nm <- EpiCompare::inner_expanding_info(pseudo_density_df, out_groups_nm)
   simulation_info_df_nm <- simulation_info_out_nm[[1]]
   ordering_list_nm <- simulation_info_out_nm[[2]]
 
-  tm_radius_fixed_nm <- inner_convert_single_radius_to_structure(mm_delta,
+  tm_radius_fixed_nm <- EpiCompare:::inner_convert_single_radius_to_structure(mm_delta,
                                                                  ordering_list_nm)
   ## vary
   tm_radius_vary_nm <- coverage_down_1d_mult(sim_df = simulations_df,
@@ -558,10 +558,10 @@ simulation_based_conformal_1d_complex <- function(truth_df, simulations_df,
   tm_radius_vary_nm_update_list <- list()
   if (length(smooth_functions) > 0 ){
     for (f_name in names(smooth_functions)){
-      tm_radius_vary_update_list[[f_name]] <- update_tm_smooth(tm_radius_vary,
+      tm_radius_vary_update_list[[f_name]] <- EpiCompare::update_tm_smooth(tm_radius_vary,
                                                                func = smooth_functions[[f_name]])
 
-      tm_radius_vary_nm_update_list[[f_name]] <- update_tm_smooth(tm_radius_vary_nm,
+      tm_radius_vary_nm_update_list[[f_name]] <- EpiCompare::update_tm_smooth(tm_radius_vary_nm,
                                                                   func = smooth_functions[[f_name]])
     }
   }
@@ -654,7 +654,7 @@ simulation_based_conformal_1d_complex <- function(truth_df, simulations_df,
                                  smooth_vary = tm_radius_vary_update_list,
                                  smooth_vary_nm = tm_radius_vary_nm_update_list),
                 truth_df_inner = truth_df,
-                simulations_group_df_inner = simulations_group_df,
+                simulations_group_df_inner = simulations_df,
                 ordering_list = ordering_list,
                 parameters = c("mm_delta_prop" = .2,
                                "sigma_percentage" = percentage_inner)))
