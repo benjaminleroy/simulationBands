@@ -1,6 +1,7 @@
 .Rproj.user
 .Rbuildignore
 .Rhistory
+.Rprofile
 .DS_Store
 inst/doc
 docs

@@ -13,8 +13,8 @@ testthat::test_that("test psuedo_density_mode_cluster_1d", {
 
   df_out <- do.call(rbind, lapply(1:length(out[[2]]),
                                   function(idx) data.frame(out[[2]][idx]) %>%
-                                    mutate(idx = idx) %>%
-                                    rownames_to_column()))
+                                    dplyr::mutate(idx = idx) %>%
+                                    tibble::rownames_to_column()))
 
   if (FALSE){
     plotly::ggplotly(df_out %>% ggplot() +
@@ -46,7 +46,7 @@ testthat::test_that("test mode_clustering_1d", {
 
   sigma <- quantile(as.matrix(dist(data)), .2)
 
-  data_df <- data.frame(data) %>% rownames_to_column()
+  data_df <- data.frame(data) %>% tibble::rownames_to_column()
   names(data_df)[2:3] <- c("x","y")
 
   out <- mode_clustering_1d(data_df, position = 2:3, naming_info = 1,
@@ -233,7 +233,7 @@ testthat::test_that("test inner_containment_conformal_score_mode_radius_1d", {
                                                           list_radius_info = list_radius_info,
                                                           list_grouping_id = list_grouping_id,
                                                           verbose = FALSE)
-  out_raw <- out %>% ungroup %>% as.data.frame()
+  out_raw <- out %>% dplyr::ungroup() %>% as.data.frame()
   testthat::expect_equal(out_raw, out_expected)
 
   # with their own names!
@@ -251,7 +251,7 @@ testthat::test_that("test inner_containment_conformal_score_mode_radius_1d", {
                                                            verbose = FALSE)
 
 
-  out2_raw <- out2 %>% ungroup %>% as.data.frame()
+  out2_raw <- out2 %>% dplyr::ungroup() %>% as.data.frame()
   testthat::expect_equal(out2_raw, out_expected2)
 
 
@@ -335,7 +335,7 @@ testthat::test_that("test simulation_based_conformal_1d_complex", {
   set.seed(50)
   sim_df <- data.frame(matrix(c(rnorm(100, mean = -2), rnorm(100, mean = 2)),
                               byrow = TRUE, ncol = 2)) %>%
-    rename(x = "X1", y = "X2")
+    dplyr::rename(x = "X1", y = "X2")
   test_df <- data.frame(x = c(2,-1, -2.5),
                         y = c(2,-3.5, 2.5))
 

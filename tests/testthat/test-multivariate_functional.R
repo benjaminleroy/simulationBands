@@ -55,19 +55,19 @@ testthat::test_that("test get_delta_dist, basic", {
 
 })
 
-testthat::test_that("test get_delta_large, basic", {
-  test <- data.frame(x = rnorm(55))
-  val <- get_delta_large(test, verbose = F)
-  val2 <- get_delta_simple(as.matrix(dist(test)))
-
-  testthat::expect_equal(val, val2)
-
-  test <- data.frame(x = rnorm(55),
-                     y = rnorm(55))
-  val <- get_delta_large(test, verbose = F)
-  val2 <- get_delta_simple(as.matrix(dist(test)))
-  testthat::expect_equal(val, val2)
-})
+# testthat::test_that("test get_delta_large, basic", {
+#   test <- data.frame(x = rnorm(55))
+#   val <- get_delta_large(test, verbose = F)
+#   val2 <- get_delta_simple(as.matrix(dist(test)))
+#
+#   testthat::expect_equal(val, val2)
+#
+#   test <- data.frame(x = rnorm(55),
+#                      y = rnorm(55))
+#   val <- get_delta_large(test, verbose = F)
+#   val2 <- get_delta_simple(as.matrix(dist(test)))
+#   testthat::expect_equal(val, val2)
+# })
 
 testthat::test_that("test get_delta_flex, basic", {
   d <- data.frame(x = 1:5)
@@ -82,13 +82,13 @@ testthat::test_that("test get_delta_nn", {
   df_big <- data.frame(x = rnorm(5000),
                        y = rnorm(5000))
   mm_delta_nn <- get_delta_nn(df_big)
-  mm_delta_split <- get_delta_large(df_big)
+  #mm_delta_split <- get_delta_large(df_big)
   mm_delta_dist <- get_delta_simple(as.matrix(dist(df_big)))
   mm_delta_simple <- get_delta_dist(dist(df_big))
 
   testthat::expect_equal(mm_delta_nn, mm_delta_simple)
-  testthat::expect_equal(mm_delta_nn, mm_delta_dist)
-  testthat::expect_equal(mm_delta_nn, mm_delta_split)
+  #testthat::expect_equal(mm_delta_nn, mm_delta_dist)
+  #testthat::expect_equal(mm_delta_nn, mm_delta_split)
 
   d <- data.frame(x = 1:5)
   testthat::expect_equal(get_delta_nn(d),1)
