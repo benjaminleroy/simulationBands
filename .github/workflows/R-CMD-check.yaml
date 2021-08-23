@@ -67,6 +67,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          remotes::install_github("benjaminleroy/EpiCompare", ref = "ben_dev_and_thesis")
           remotes::install_deps(dependencies = TRUE)
           remotes::install_cran("rcmdcheck")
           remotes::install_cran("covr") # for codecoverage
