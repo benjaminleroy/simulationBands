@@ -9,11 +9,8 @@ using namespace Rcpp;
 //' @param m1 first matrix (n x p)
 //' @param m2 second matrix (m x p)
 //'
-//'
-//'
 // [[Rcpp::export]]
 NumericMatrix crossdist(NumericMatrix m1, NumericMatrix m2) {
-
   int nrow1 = m1.nrow();
   int nrow2 = m2.nrow();
   int ncol = m1.ncol();

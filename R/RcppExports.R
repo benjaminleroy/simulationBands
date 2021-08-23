@@ -9,8 +9,6 @@
 #' @param m1 first matrix (n x p)
 #' @param m2 second matrix (m x p)
 #'
-#'
-#'
 crossdist <- function(m1, m2) {
     .Call('_simulationBands_crossdist', PACKAGE = 'simulationBands', m1, m2)
 }
