@@ -378,3 +378,63 @@ testthat::test_that("test simulation_based_conformal_1d_complex", {
 
 
 })
+
+
+testthat::test_that("combine_via_modes", {
+  order_idx = c(1,2,5,3,4)
+  grouping <- c(0,1,1,0,0)
+
+  inner_sim_data <-  c(0,0,.05,-.4,.1)
+
+  out <- combine_via_modes(inner_sim_data, order_idx, grouping)
+  testthat::expect_equal(out, c(0,0,.1,.1,.4))
+})
+
+testthat::test_that("test cs_across_radius, static", {
+  inner_sim_data <- c(0,1,2,4,8)
+  # ranking of sims: c(3,1,2,4,5)
+  radius_prop_range <- c(.05,.10,.2,.8,.5,.6,.75)
+  sigma_prop <- .5
+
+
+  # multiple observations --
+  # radius range expected:
+  obs_values <- c(-.01,.25,1.5,3,6.75,0)
+
+  out <- cs_across_radius(inner_sim_data = inner_sim_data,
+                          obs_values = obs_values,
+                          radius_prop_range = radius_prop_range,
+                          sigma_prop = sigma_prop)
+
+  expected_rad_range <- c(0,1,1,2,4)[ceiling(radius_prop_range * length(inner_sim_data))]
+  #                       ^ min span radius for inner_sim_data
+
+  #
+  # when radius is 0 (1:3) all values are 0 (final value x= 0)
+  expected_cs_mat <- matrix(c(0,0,0,5,3,3,5, # (value = 0.0) when radius is 0, it's not closest to any (3 0s), then when rad = 1, close enough only to 0 (values 5,6=6-3), when rad == 2, captured by 1: (values 4,7=6-1)
+                              0,0,0,5,5,5,5, # (value = .25) when radius is 0, it's not closest to any (3 0s), then less than rad away from 1 (so values 4:7:6-1)
+                              0,0,0,5,5,5,5, # (value = 1.5) when radius is 0, it's not closest to any (3 0s), then less than rad away from 1 (so values 4:7:6-1)
+                              0,0,0,5,4,4,5,# (value = 3) when radius is 0, it's not closest to any (3 0s), then closest to "2" (6-2), when rad == 2, captured by 1: (values 4,7=6-1
+                              0,0,0,1,0,0,1, # (value = 6.23) when radius < 2, it's not closest to any (5 0s), when rad = 2 only in 8's orbit (6-5)
+                              3,3,3,5,5,5,5), # (value = 0) starts closest to 0 (even though rad = 0) - so (3 values of 6-3), then closest to 1 (values 4:7=6-1)
+                            byrow = TRUE,
+                            nrow = length(obs_values))
+
+  testthat::expect_equal(expected_cs_mat, out$cs_mat)
+
+
+  testthat::expect_equal(expected_rad_range, out$radius_range)
+
+  # single observation --
+  obs_values2 <- c(1.5)
+
+  out2 <- cs_across_radius(inner_sim_data = inner_sim_data,
+                           obs_values = obs_values2,
+                           radius_prop_range = radius_prop_range,
+                           sigma_prop = sigma_prop)
+  # same outcome...
+  testthat::expect_equal(out2$cs_mat, out$cs_mat[3,,drop = F])
+  testthat::expect_equal(out2$radius_range, out$radius_range)
+
+})
+

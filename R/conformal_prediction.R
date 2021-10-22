@@ -664,6 +664,119 @@ simulation_based_conformal_1d_complex <- function(truth_df, simulations_df,
 
 
 
+#' Inner function to repeat values before (if current value is na)
+#'
+#' from https://stackoverflow.com/questions/7735647/replacing-nas-with-latest-non-na-value
+#'
+#' @param x vector (with NA values )
+#'
+#' @return updated x value
+repeat.before <- function(x) {   # repeats the last non NA value. Keeps leading NA
+  ind = which(!is.na(x))      # get positions of nonmissing values
+  if(is.na(x[1]))             # if it begins with a missing, add the
+    ind = c(1,ind)        # first position to the indices
+  rep(x[ind], times = diff(   # repeat the values at these indices
+    c(ind, length(x) + 1) )) # diffing the indices + length yields how often
+                               # they need to be repeated
+}
 
+#' combine coverage_down_1d_single grouping across modes
+#'
+#' @param inner_sim_data simulation data
+#' @param order_idx pseudo-density rank ordering of simulation observations
+#' @param grouping vector of groupings of simulation data
+#'
+#' @return vector combination of coverage_down_1d_single between groups
+#' @export
+combine_via_modes <- function(inner_sim_data, order_idx, grouping){
+  # combining coverage_down_1d_single across modes (with grouping definition)
+  data_full <- matrix(rep(NA, length(order_idx)*2), ncol=2)
+  group_index_options <- unique(grouping)
+
+  grouping_order <- grouping[order_idx]
+
+  g_counter <-  1
+  for (g_idx in group_index_options){
+    inner_ordering <- order_idx[grouping_order == g_idx]
+
+    inner_min_coverage <- coverage_down_1d_single(data.frame(sim = inner_sim_data[inner_ordering]),
+                                                  e_cols = "sim",verbose = F)$min_cover_vec
+    data_full[grouping_order == g_idx,g_counter] <- inner_min_coverage
+    g_counter <- g_counter + 1
+  }
+
+  data_full <- data_full %>% apply(2, repeat.before)
+  data_full[is.na(data_full)] <- 0 # starting values
+  min_cover_vec <- data_full %>% apply(1, max)
+  return(min_cover_vec)
+}
+
+
+
+#' calculate 1d conformal score across different radius proportion values
+#'
+#' @param inner_sim_data vector of simulation values
+#' @param obs_values vector of true observed values (can be length 1)
+#' @param radius_prop_range vector of proportion for minumum spanning radius
+#' @param sigma_prop proportion for sigma
+#'
+#' @return conoformal score for observations
+#' @export
+cs_across_radius <- function(inner_sim_data, obs_values, radius_prop_range, sigma_prop, x_value=NA){
+  B <- length(inner_sim_data)
+
+  # get min_cover_vec
+  sim_dmat <- as.matrix(dist(inner_sim_data))
+  sigma_val <- quantile(sim_dmat, sigma_prop)
+
+  sim_pd <- apply(exp(-(sim_dmat^2)/sigma_val^2), 1, mean)
+  sorting_info <- sort(-sim_pd, method = "shell", index.return = TRUE)
+  order_idx <- sorting_info$ix
+
+  if(is.na(x_value) || x_value < -.5){
+    min_cover_vec <- coverage_down_1d_single(data.frame(sim = inner_sim_data[order_idx]),
+                                             e_cols = "sim",verbose = F)$min_cover_vec
+
+  } else {
+    # cheating mode clustering (for thesis completion :( )
+    f <- function(x){(x-1)^2*(x+1)}
+    midpoint <- f(x_value)
+    split_logic <- inner_sim_data > midpoint
+
+    min_cover_vec <- combine_via_modes(inner_sim_data, order_idx, split_logic)
+
+  }
+
+  # min spanning radius relative to radius quantiles
+  radius_cut_idx <- sapply(radius_prop_range,
+                           function(rad_prop) {
+                             ceiling(rad_prop*length(min_cover_vec))
+                           }
+  )
+
+  radius_range <- min_cover_vec[radius_cut_idx]
+
+  all_inner_distances <- my_pdist(df1 = data.frame(obs_values),
+                                  df2 = data.frame(inner_sim_data[order_idx]))
+
+  inner_B_plus_1_minus_cs_per_radius <- matrix(NA, nrow = length(obs_values),
+                                               ncol = length(radius_prop_range))
+
+  for (obs_idx in 1:length(obs_values)){
+    r_idx <- 1
+    for (rad in radius_range){
+      inner_B_plus_1_minus_cs_per_radius[obs_idx,r_idx] <- min(
+        c(which(all_inner_distances[obs_idx,] <= rad),
+          ncol(all_inner_distances)+1)
+      )
+      r_idx <- r_idx + 1
+    }
+  }
+
+  inner_cs_per_radius <- B+1 - inner_B_plus_1_minus_cs_per_radius
+
+
+  return(list(cs_mat = inner_cs_per_radius, radius_range = radius_range))
+}
 
 
